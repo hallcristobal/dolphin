@@ -25,6 +25,9 @@
     <Filter Include="Resources">
       <UniqueIdentifier>{d6bc4dd6-06ed-46ad-b327-04afb26e10ec}</UniqueIdentifier>
     </Filter>
+    <Filter Include="GUI\ZeldaEdition">
+      <UniqueIdentifier>{e83c2185-9d54-4972-9796-dfe21fde49dc}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Main.cpp" />
@@ -166,6 +169,21 @@
     <ClCompile Include="ControllerConfigDiag.cpp">
       <Filter>GUI</Filter>
     </ClCompile>
+    <ClCompile Include="TPLoadManager.cpp">
+      <Filter>GUI\ZeldaEdition</Filter>
+    </ClCompile>
+    <ClCompile Include="TPSavefileManager.cpp">
+      <Filter>GUI\ZeldaEdition</Filter>
+    </ClCompile>
+    <ClCompile Include="TPVideoComparison.cpp">
+      <Filter>GUI\ZeldaEdition</Filter>
+    </ClCompile>
+    <ClCompile Include="TWWSuperswim.cpp">
+      <Filter>GUI\ZeldaEdition</Filter>
+    </ClCompile>
+    <ClCompile Include="TWWTunerInput.cpp">
+      <Filter>GUI\ZeldaEdition</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Main.h" />
@@ -299,6 +317,21 @@
     </ClInclude>
     <ClInclude Include="ControllerConfigDiag.h">
       <Filter>GUI</Filter>
+    </ClInclude>
+    <ClInclude Include="TPLoadManager.h">
+      <Filter>GUI\ZeldaEdition</Filter>
+    </ClInclude>
+    <ClInclude Include="TPSavefileManager.h">
+      <Filter>GUI\ZeldaEdition</Filter>
+    </ClInclude>
+    <ClInclude Include="TPVideoComparison.h">
+      <Filter>GUI\ZeldaEdition</Filter>
+    </ClInclude>
+    <ClInclude Include="TWWSuperswim.h">
+      <Filter>GUI\ZeldaEdition</Filter>
+    </ClInclude>
+    <ClInclude Include="TWWTunerInput.h">
+      <Filter>GUI\ZeldaEdition</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

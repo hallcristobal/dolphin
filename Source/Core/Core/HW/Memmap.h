@@ -91,6 +91,10 @@ u32 Read_Instruction(const u32 address);
 
 // For use by emulator
 
+//Dragonbane
+std::string Read_String(const u32 startAddress, int count);
+void Write_String(const std::string text, const u32 startAddress);
+
 u8  Read_U8(const u32 address);
 u16 Read_U16(const u32 address);
 u32 Read_U32(const u32 address);
@@ -114,6 +118,7 @@ void Write_U32_Swap(const u32 var, const u32 address);
 void Write_U64_Swap(const u64 var, const u32 address);
 
 // Useful helper functions, used by ARM JIT
+void Write_F32(const float var, const u32 address); //Dragonbane
 void Write_F64(const double var, const u32 address);
 
 std::string GetString(u32 em_address, size_t size = 0);

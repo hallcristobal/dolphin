@@ -27,6 +27,14 @@
 #include "DolphinWX/Globals.h"
 #include "InputCommon/GCPadStatus.h"
 
+//Dragonbane
+#include "DolphinWX/TPSavefileManager.h"
+#include "DolphinWX/TPLoadManager.h"
+#include "DolphinWX/TPVideoComparison.h"
+#include "DolphinWX/TWWSuperswim.h"
+#include "DolphinWX/TWWTunerInput.h"
+
+
 #if defined(HAVE_X11) && HAVE_X11
 #include "DolphinWX/X11Utils.h"
 #endif
@@ -100,6 +108,13 @@ public:
 	NetPlaySetupDiag* g_NetPlaySetupDiag;
 	wxCheatsWindow* g_CheatsWindow;
 	TASInputDlg* g_TASInputDlg[8];
+
+	//Dragonbane
+	TPSavefileManager* g_TPSaveFileManager;
+	TPLoadManager* g_TPLoadManager;
+	TPVideoComparison* g_TPVideoComparison;
+	TWWSuperswim* g_TWWSuperswim;
+	TWWTunerInput* g_TWWTunerInput;
 
 	void InitBitmaps();
 	void DoPause();
@@ -264,13 +279,16 @@ private:
 	void OnStop(wxCommandEvent& event);
 	void OnReset(wxCommandEvent& event);
 	void OnRecord(wxCommandEvent& event);
+	void OnStopRecord(wxCommandEvent& event); //Dragonbane
 	void OnPlayRecording(wxCommandEvent& event);
 	void OnRecordExport(wxCommandEvent& event);
 	void OnRecordReadOnly(wxCommandEvent& event);
+	void OnRecordVerify(wxCommandEvent& event); //Dragonbane
 	void OnTASInput(wxCommandEvent& event);
 	void OnTogglePauseMovie(wxCommandEvent& event);
 	void OnToggleDumpFrames(wxCommandEvent& event);
 	void OnToggleDumpAudio(wxCommandEvent& event);
+	void OnSetDumpPath(wxCommandEvent& event); //Dragonbane
 	void OnShowLag(wxCommandEvent& event);
 	void OnShowFrameCount(wxCommandEvent& event);
 	void OnShowInputDisplay(wxCommandEvent& event);
@@ -316,6 +334,11 @@ private:
 	void OnHostMessage(wxCommandEvent& event);
 
 	void OnMemcard(wxCommandEvent& event); // Misc
+	void OnTPSave(wxCommandEvent& event); //Dragonbane
+	void OnTPLoad(wxCommandEvent& event); //Dragonbane
+	void OnTPVideoComparison(wxCommandEvent& event); //Dragonbane
+	void OnTWWSuperSwim(wxCommandEvent& event); //Dragonbane
+	void OnTWWTunerInput(wxCommandEvent& event); //Dragonbane
 	void OnImportSave(wxCommandEvent& event);
 	void OnExportAllSaves(wxCommandEvent& event);
 

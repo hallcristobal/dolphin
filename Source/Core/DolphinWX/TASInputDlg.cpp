@@ -4,26 +4,30 @@
 
 #include <cstddef>
 #include <wx/bitmap.h>
-#include <wx/chartype.h>
 #include <wx/checkbox.h>
 #include <wx/dcmemory.h>
-#include <wx/defs.h>
 #include <wx/dialog.h>
-#include <wx/event.h>
-#include <wx/gdicmn.h>
-#include <wx/layout.h>
 #include <wx/sizer.h>
 #include <wx/slider.h>
 #include <wx/statbmp.h>
 #include <wx/string.h>
 #include <wx/textctrl.h>
-#include <wx/translation.h>
-#include <wx/validate.h>
-#include <wx/window.h>
-#include <wx/windowid.h>
+
+#include <wx/msgdlg.h> //Dragonbane
+
+#include <wx/app.h>
+#include "Core/Core.h"
+#include "Core/CoreParameter.h"
+#include "Core/Boot/Boot.h"
+#include "DolphinWX/Frame.h"
+#include "DolphinWX/Globals.h"
+#include "DolphinWX/Main.h"
+#include "Core/HW/ProcessorInterface.h"
+#include "Core/HW/Memmap.h"
 
 #include "Common/CommonTypes.h"
 #include "Core/Movie.h"
+#include "Core/State.h"
 #include "Core/HW/Wiimote.h"
 #include "Core/HW/WiimoteEmu/WiimoteEmu.h"
 #include "Core/HW/WiimoteEmu/Attachment/Nunchuk.h"
@@ -32,19 +36,329 @@
 #include "InputCommon/GCPadStatus.h"
 #include "InputCommon/InputConfig.h"
 
+#include <lua.hpp> //Dragonbane
+
+//Dragonbane: Lua Stuff
+static TASInputDlg *luaInstance;
+static lua_State *luaState;
+
+//Lua Functions
+int ReadValue8(lua_State *L)
+{
+	int argc = lua_gettop(L);
+
+	if (argc < 1)
+		return 0;
+
+	u32 address = lua_tointeger(L, 1);
+
+	u8 result = Memory::Read_U8(address);
+
+	lua_pushinteger(L, result); // return value
+	return 1; // number of return values
+}
+
+int ReadValue16(lua_State *L)
+{
+	int argc = lua_gettop(L);
+
+	if (argc < 1)
+		return 0;
+
+	u32 address = lua_tointeger(L, 1);
+
+	u16 result = Memory::Read_U16(address);
+
+	lua_pushinteger(L, result); // return value
+	return 1; // number of return values
+}
+
+int ReadValue32(lua_State *L)
+{
+	int argc = lua_gettop(L);
+
+	if (argc < 1)
+		return 0;
+
+	u32 address = lua_tointeger(L, 1);
+
+	u32 result = Memory::Read_U32(address);
+
+	lua_pushinteger(L, result); // return value
+	return 1; // number of return values
+}
+
+int ReadValueFloat(lua_State *L)
+{
+	int argc = lua_gettop(L);
+
+	if (argc < 1)
+		return 0;
+
+	u32 address = lua_tointeger(L, 1);
+
+	float result = Memory::Read_F32(address);
+
+	lua_pushnumber(L, result); // return value
+	return 1; // number of return values
+}
+int ReadValueString(lua_State *L)
+{
+	int argc = lua_gettop(L);
+
+	if (argc < 2)
+		return 0;
+
+	u32 address = lua_tointeger(L, 1);
+	int count = lua_tointeger(L, 2);
+
+	std::string result = Memory::Read_String(address, count);
+
+	lua_pushstring(L, result.c_str()); // return value
+	return 1; // number of return values
+}
+
+//Write Stuff
+int WriteValue8(lua_State *L)
+{
+	int argc = lua_gettop(L);
+
+	if (argc < 2)
+		return 0;
+
+	u32 address = lua_tointeger(L, 1);
+	u8 value = lua_tointeger(L, 2);
+
+	Memory::Write_U8(value, address);
+
+	return 0; // number of return values
+}
+
+int WriteValue16(lua_State *L)
+{
+	int argc = lua_gettop(L);
+
+	if (argc < 2)
+		return 0;
+
+	u32 address = lua_tointeger(L, 1);
+	u16 value = lua_tointeger(L, 2);
+
+	Memory::Write_U16(value, address);
+
+	return 0; // number of return values
+}
+
+int WriteValue32(lua_State *L)
+{
+	int argc = lua_gettop(L);
+
+	if (argc < 2)
+		return 0;
+
+	u32 address = lua_tointeger(L, 1);
+	u32 value = lua_tointeger(L, 2);
+
+	Memory::Write_U32(value, address);
+
+	return 0; // number of return values
+}
+
+int WriteValueFloat(lua_State *L)
+{
+	int argc = lua_gettop(L);
+
+	if (argc < 2)
+		return 0;
+
+	u32 address = lua_tointeger(L, 1);
+	double value = lua_tonumber(L, 2);
+
+	Memory::Write_F32((float)value, address);
+
+	return 0; // number of return values
+}
+int WriteValueString(lua_State *L)
+{
+	int argc = lua_gettop(L);
+
+	if (argc < 2)
+		return 0;
+
+	u32 address = lua_tointeger(L, 1);
+	const char* value = lua_tostring(L, 2);
+
+	std::string string = StringFromFormat("%s", value);
+
+	Memory::Write_String(string, address);
+
+	return 0; // number of return values
+}
+
+int GetPointerNormal(lua_State *L)
+{
+	int argc = lua_gettop(L);
+
+	if (argc < 1)
+		return 0;
+
+	u32 address = lua_tointeger(L, 1);
+
+	u32 pointer = Memory::Read_U32(address);
+
+	if (pointer > 0x80000000)
+	{
+		pointer -= 0x80000000;
+	}
+	else
+	{
+		return 0;
+	}
+
+	lua_pushinteger(L, pointer); // return value
+	return 1; // number of return values
+}
+
+int PressButton(lua_State *L)
+{
+	int argc = lua_gettop(L);
+
+	if (argc < 1)
+		return 0;
+
+	const char* button = lua_tostring(L, 1);
+
+	luaInstance->iPressButton(button);
+
+	return 0; // number of return values
+}
+
+int ReleaseButton(lua_State *L)
+{
+	int argc = lua_gettop(L);
+
+	if (argc < 1)
+		return 0;
+
+	const char* button = lua_tostring(L, 1);
+
+	luaInstance->iReleaseButton(button);
+
+	return 0; // number of return values
+}
+
+int SetMainStickX(lua_State *L)
+{
+	int argc = lua_gettop(L);
+
+	if (argc < 1)
+		return 0;
+
+	int xPos = lua_tointeger(L, 1);
+
+	luaInstance->iSetMainStickX(xPos);
+
+	return 0;
+}
+int SetMainStickY(lua_State *L)
+{
+	int argc = lua_gettop(L);
+
+	if (argc < 1)
+		return 0;
+
+	int yPos = lua_tointeger(L, 1);
+
+	luaInstance->iSetMainStickY(yPos);
+
+	return 0;
+}
+
+int SetCStickX(lua_State *L)
+{
+	int argc = lua_gettop(L);
+
+	if (argc < 1)
+		return 0;
+
+	int xPos = lua_tointeger(L, 1);
+
+	luaInstance->iSetCStickX(xPos);
+
+	return 0;
+}
+int SetCStickY(lua_State *L)
+{
+	int argc = lua_gettop(L);
+
+	if (argc < 1)
+		return 0;
+
+	int yPos = lua_tointeger(L, 1);
+
+	luaInstance->iSetCStickY(yPos);
+
+	return 0;
+}
+
+int GetFrameCount(lua_State *L)
+{
+	int argc = lua_gettop(L);
+
+	lua_pushinteger(L, Movie::g_currentFrame); // return value
+	return 1; // number of return values
+}
+
+int MsgBox(lua_State *L)
+{
+	int argc = lua_gettop(L);
+
+	if (argc < 1)
+		return 0;
+
+	const char* text = lua_tostring(L, 1);
+
+	std::string message = StringFromFormat("Lua Msg: %s", text);
+	wxMessageBox(message);
+
+	return 0; // number of return values
+}
+
+int AbortSwim(lua_State *L)
+{
+	int argc = lua_gettop(L);
+
+	Movie::swimStarted = false;
+
+	return 0; // number of return values
+}
+
+void HandleLuaErrors(lua_State *L, int status)
+{
+	if (status != 0)
+	{
+		std::string message = StringFromFormat("Lua Error: %s", lua_tostring(L, -1));
+		wxMessageBox(message);
+
+		lua_pop(L, 1); // remove error message
+	}
+}
+
+
+
 
 TASInputDlg::TASInputDlg(wxWindow* parent, wxWindowID id, const wxString& title,
                          const wxPoint& position, const wxSize& size, long style)
 : wxDialog(parent, id, title, position, size, style)
 {
-	CreateBaseLayout();
+
 }
 
 void TASInputDlg::CreateBaseLayout()
 {
 	for (unsigned int i = 0; i < 10; ++i)
 		m_controls[i] = nullptr;
-	for (unsigned int i = 0; i < 14; ++i)
+	for (unsigned int i = 0; i < 18; ++i) //Original: 17
 		m_buttons[i] = nullptr;
 
 	m_buttons[0] = &m_dpad_down;
@@ -63,6 +377,7 @@ void TASInputDlg::CreateBaseLayout()
 	m_dpad_down = CreateButton("Down");
 	m_dpad_left = CreateButton("Left");
 
+	m_buttons_dpad = new wxGridSizer(3);
 	m_buttons_dpad->AddSpacer(20);
 	m_buttons_dpad->Add(m_dpad_up.checkbox, false);
 	m_buttons_dpad->AddSpacer(20);
@@ -74,6 +389,7 @@ void TASInputDlg::CreateBaseLayout()
 	m_buttons_dpad->AddSpacer(20);
 
 	Bind(wxEVT_CLOSE_WINDOW, &TASInputDlg::OnCloseWindow, this);
+	Bind(wxEVT_TEXT, &TASInputDlg::UpdateFromText, this);
 }
 
 const int TASInputDlg::m_gc_pad_buttons_bitmask[12] = {
@@ -92,6 +408,8 @@ void TASInputDlg::CreateWiiLayout(int num)
 {
 	if (m_has_layout)
 		return;
+
+	CreateBaseLayout();
 
 	m_buttons[6] = &m_one;
 	m_buttons[7] = &m_two;
@@ -196,12 +514,21 @@ void TASInputDlg::CreateGCLayout()
 	if (m_has_layout)
 		return;
 
+	CreateBaseLayout();
+
 	m_buttons[6] = &m_x;
 	m_buttons[7] = &m_y;
 	m_buttons[8] = &m_z;
 	m_buttons[9] = &m_l;
 	m_buttons[10] = &m_r;
 	m_buttons[11] = &m_start;
+
+	//Dragonbane: Special
+	m_buttons[14] = &m_reset;
+	m_buttons[15] = &m_quickspin;
+	m_buttons[16] = &m_rollassist;
+	m_buttons[17] = &m_skipDialog;
+
 
 	m_controls[2] = &m_c_stick.x_cont;
 	m_controls[3] = &m_c_stick.y_cont;
@@ -240,7 +567,7 @@ void TASInputDlg::CreateGCLayout()
 	m_z = CreateButton("Z");
 	m_start = CreateButton("Start");
 
-	for (unsigned int i = 4; i < 14; ++i)
+	for (unsigned int i = 4; i < 14; ++i) //17
 		if (m_buttons[i] != nullptr)
 			m_buttons_grid->Add(m_buttons[i]->checkbox, false);
 	m_buttons_grid->AddSpacer(5);
@@ -248,12 +575,37 @@ void TASInputDlg::CreateGCLayout()
 	m_buttons_box->Add(m_buttons_grid);
 	m_buttons_box->Add(m_buttons_dpad);
 
+
+
+	//Dragonbane: Special Box
+	wxStaticBoxSizer* const m_buttons_extra = new wxStaticBoxSizer(wxVERTICAL, this, _("Extras"));
+	wxGridSizer* const m_buttons_grid_extra = new wxGridSizer(1);
+
+	m_reset = CreateButton("Reset");
+	m_quickspin = CreateButton("Quick Spin");
+	m_rollassist = CreateButton("Auto Roll");
+	m_skipDialog = CreateButton("Auto Dialog");
+
+	m_rollassist.checkbox->Bind(wxEVT_CHECKBOX, &TASInputDlg::UpdateFromButtons, this);
+
+	for (unsigned int i = 14; i < 18; ++i)
+		if (m_buttons[i] != nullptr)
+			m_buttons_grid_extra->Add(m_buttons[i]->checkbox, false);
+	m_buttons_grid_extra->AddSpacer(5);
+
+	m_buttons_extra->Add(m_buttons_grid_extra);
+
+
 	wxBoxSizer* const main_szr = new wxBoxSizer(wxVERTICAL);
 
 	top_box->Add(main_box, 0, wxALL, 5);
 	top_box->Add(c_box, 0, wxTOP | wxRIGHT, 5);
 	bottom_box->Add(shoulder_box, 0, wxLEFT | wxRIGHT, 5);
 	bottom_box->Add(m_buttons_box, 0, wxBOTTOM, 5);
+
+	//Dragonban
+	bottom_box->Add(m_buttons_extra, 0, wxLEFT | wxRIGHT | wxBOTTOM, 5);
+
 	main_szr->Add(top_box);
 	main_szr->Add(bottom_box);
 	SetSizerAndFit(main_szr);
@@ -365,14 +717,21 @@ void TASInputDlg::SetStickValue(bool* ActivatedByKeyboard, int* AmountPressed, w
 	{
 		*AmountPressed = CurrentValue;
 		*ActivatedByKeyboard = true;
-		Textbox->SetValue(std::to_string(*AmountPressed));
 	}
 	else if (*ActivatedByKeyboard)
 	{
 		*AmountPressed = center;
 		*ActivatedByKeyboard = false;
-		Textbox->SetValue(std::to_string(*AmountPressed));
 	}
+	else
+	{
+		return;
+	}
+	
+	Textbox->ChangeValue(std::to_string(*AmountPressed));
+	wxCommandEvent* evt = new wxCommandEvent(wxEVT_TEXT, Textbox->GetId());
+	evt->SetEventObject(Textbox);
+	wxQueueEvent(this, evt);
 }
 
 void TASInputDlg::SetSliderValue(Control* control, int CurrentValue, int default_value)
@@ -381,14 +740,22 @@ void TASInputDlg::SetSliderValue(Control* control, int CurrentValue, int default
 	{
 		control->value = CurrentValue;
 		control->set_by_keyboard = true;
-		control->text->SetValue(std::to_string(CurrentValue));
+		control->text->ChangeValue(std::to_string(CurrentValue));
 	}
 	else if (control->set_by_keyboard)
 	{
 		control->value = default_value;
 		control->set_by_keyboard = false;
-		control->text->SetValue(std::to_string(default_value));
+		control->text->ChangeValue(std::to_string(default_value));
 	}
+	else
+	{
+		return;
+	}
+	
+	wxCommandEvent* evt = new wxCommandEvent(wxEVT_TEXT, control->text_id);
+	evt->SetEventObject(control->text);
+	wxQueueEvent(this, evt);
 }
 
 void TASInputDlg::SetButtonValue(Button* button, bool CurrentState)
@@ -407,7 +774,7 @@ void TASInputDlg::SetButtonValue(Button* button, bool CurrentState)
 
 void TASInputDlg::SetWiiButtons(u16* butt)
 {
-	for (unsigned int i = 0; i < 10; ++i)
+	for (unsigned int i = 0; i < 11; ++i)
 	{
 		if (m_buttons[i] != nullptr)
 			*butt |= (m_buttons[i]->checkbox->IsChecked()) ? m_wii_buttons_bitmask[i] : 0;
@@ -443,7 +810,7 @@ void TASInputDlg::GetKeyBoardInput(u8* data, WiimoteEmu::ReportFeatures rptf, in
 
 	if (coreData)
 	{
-		for (unsigned int i = 0; i < 10; ++i)
+		for (unsigned int i = 0; i < 11; ++i)
 		{
 			if (m_buttons[i] != nullptr)
 				SetButtonValue(m_buttons[i], (((wm_buttons*)coreData)->hex & m_wii_buttons_bitmask[i]) != 0);
@@ -615,12 +982,15 @@ void TASInputDlg::GetValues(GCPadStatus* PadStatus)
 	//TODO:: Make this instant not when polled.
 	GetKeyBoardInput(PadStatus);
 
+	//Dragonbane: Execute custom scripts
+	ExecuteScripts();
+
 	PadStatus->stickX = m_main_stick.x_cont.value;
 	PadStatus->stickY = m_main_stick.y_cont.value;
 	PadStatus->substickX = m_c_stick.x_cont.value;
 	PadStatus->substickY = m_c_stick.y_cont.value;
-	PadStatus->triggerLeft = m_l.checkbox->GetValue() ? 255 : m_l_cont.slider->GetValue();
-	PadStatus->triggerRight = m_r.checkbox->GetValue() ? 255 : m_r_cont.slider->GetValue();
+	PadStatus->triggerLeft = m_l.checkbox->GetValue() ? 255 : m_l_cont.value; //m_l_cont.slider->GetValue();
+	PadStatus->triggerRight = m_r.checkbox->GetValue() ? 255 : m_r_cont.value; //m_r_cont.slider->GetValue();
 
 	for (unsigned int i = 0; i < 14; ++i)
 	{
@@ -872,3 +1242,462 @@ wxBitmap TASInputDlg::CreateStickBitmap(int x, int y)
 	memDC.SelectObject(wxNullBitmap);
 	return bitmap;
 }
+
+//Dragonbane
+void TASInputDlg::UpdateExtraButtons(bool check, bool uncheck)
+{
+	if (m_rollassist.checkbox && m_has_layout && !Movie::IsPlayingInput())
+	{
+		if (check)
+		{
+			m_rollassist.checkbox->SetValue(true);
+		}
+		else if (uncheck)
+		{
+			m_rollassist.checkbox->SetValue(false);
+		}
+	}
+}
+
+void TASInputDlg::UpdateFromButtons(wxCommandEvent& event)
+{
+	if (m_rollassist.checkbox && m_has_layout && !Movie::IsPlayingInput())
+	{
+		if (m_rollassist.checkbox->IsChecked() && !Movie::roll_enabled)
+		{
+			Movie::roll_enabled = true;
+			Movie::first_roll = true;
+			Movie::roll_timer = -1;
+		}
+		if (!m_rollassist.checkbox->IsChecked())
+		{
+			Movie::roll_enabled = false;
+		}
+	}
+	else
+	{
+		Movie::roll_enabled = false;
+	}
+
+	Movie::checkSave = false;
+	Movie::uncheckSave = false;
+}
+
+
+//Dragonbane: Lua Wrapper Functions
+void TASInputDlg::iPressButton(const char* button)
+{
+	if (!strcmp(button, "A"))
+		m_a.checkbox->SetValue(true);
+	else if (!strcmp(button, "B"))
+		m_b.checkbox->SetValue(true);
+	else if (!strcmp(button, "X"))
+		m_x.checkbox->SetValue(true);
+	else if (!strcmp(button, "Y"))
+		m_y.checkbox->SetValue(true);
+	else if (!strcmp(button, "Z"))
+		m_z.checkbox->SetValue(true);
+	else if (!strcmp(button, "L"))
+		m_l.checkbox->SetValue(true);
+	else if (!strcmp(button, "R"))
+		m_r.checkbox->SetValue(true);
+	else if (!strcmp(button, "Start"))
+		m_start.checkbox->SetValue(true);
+	else if (!strcmp(button, "D-Up"))
+		m_dpad_up.checkbox->SetValue(true);
+	else if (!strcmp(button, "D-Down"))
+		m_dpad_down.checkbox->SetValue(true);
+	else if (!strcmp(button, "D-Left"))
+		m_dpad_left.checkbox->SetValue(true);
+	else if (!strcmp(button, "D-Right"))
+		m_dpad_right.checkbox->SetValue(true);
+}
+void TASInputDlg::iReleaseButton(const char* button)
+{
+	if (!strcmp(button, "A"))
+		m_a.checkbox->SetValue(false);
+	else if (!strcmp(button, "B"))
+		m_b.checkbox->SetValue(false);
+	else if (!strcmp(button, "X"))
+		m_x.checkbox->SetValue(false);
+	else if (!strcmp(button, "Y"))
+		m_y.checkbox->SetValue(false);
+	else if (!strcmp(button, "Z"))
+		m_z.checkbox->SetValue(false);
+	else if (!strcmp(button, "L"))
+		m_l.checkbox->SetValue(false);
+	else if (!strcmp(button, "R"))
+		m_r.checkbox->SetValue(false);
+	else if (!strcmp(button, "Start"))
+		m_start.checkbox->SetValue(false);
+	else if (!strcmp(button, "D-Up"))
+		m_dpad_up.checkbox->SetValue(false);
+	else if (!strcmp(button, "D-Down"))
+		m_dpad_down.checkbox->SetValue(false);
+	else if (!strcmp(button, "D-Left"))
+		m_dpad_left.checkbox->SetValue(false);
+	else if (!strcmp(button, "D-Right"))
+		m_dpad_right.checkbox->SetValue(false);
+}
+void TASInputDlg::iSetMainStickX(int xVal)
+{
+	m_main_stick.x_cont.text->SetValue(std::to_string(xVal));
+}
+void TASInputDlg::iSetMainStickY(int yVal)
+{
+	m_main_stick.y_cont.text->SetValue(std::to_string(yVal));
+}
+void TASInputDlg::iSetCStickX(int xVal)
+{
+	m_c_stick.x_cont.text->SetValue(std::to_string(xVal));
+}
+void TASInputDlg::iSetCStickY(int yVal)
+{
+	m_c_stick.y_cont.text->SetValue(std::to_string(yVal));
+}
+
+
+//Dragonbane: Custom Scripts
+void TASInputDlg::ExecuteScripts()
+{
+	if (!Core::IsRunningAndStarted())
+		return;
+
+	std::string gameID = SConfig::GetInstance().m_LocalCoreStartupParameter.GetUniqueID();
+	u32 isLoadingAdd;
+	u32 eventFlagAdd;
+	u32 charPointerAdd;
+	bool isTP = false;
+
+	if (!gameID.compare("GZ2E01"))
+	{
+		eventFlagAdd = 0x40b16d;
+		isLoadingAdd = 0x450ce0;
+
+		isTP = true;
+	}
+	else if (!gameID.compare("GZ2P01"))
+	{
+		eventFlagAdd = 0x40d10d;
+		isLoadingAdd = 0x452ca0;
+
+		isTP = true;
+	}
+
+	//TWW Stuff
+	bool isTWW = false;
+
+	if (!gameID.compare("GZLJ01"))
+	{
+		isLoadingAdd = 0x3ad335;
+		eventFlagAdd = 0x3bd3a2;
+		charPointerAdd = 0x3ad860;
+
+		isTWW = true;
+	}
+
+	//Reset button
+	if (m_reset.checkbox->IsChecked())
+	{
+		m_reset.checkbox->SetValue(false);
+
+		if (Movie::IsRecordingInput())
+			Movie::g_bReset = true;
+
+		ProcessorInterface::ResetButton_Tap();
+	}
+
+	//Auto Dialog
+	if (m_skipDialog.checkbox->IsChecked())
+	{
+		if (!auto_dialog)
+		{
+			dialog_timer = Movie::g_currentFrame;
+			auto_dialog = true;
+		}
+
+		if (dialog_timer + 2 == Movie::g_currentFrame)
+		{
+			dialog_timer = Movie::g_currentFrame;
+		}
+
+		if (dialog_timer + 1 == Movie::g_currentFrame)
+		{
+			m_b.checkbox->SetValue(false);
+			m_a.checkbox->SetValue(true);
+		}
+
+		if (dialog_timer == Movie::g_currentFrame)
+		{
+			m_b.checkbox->SetValue(true);
+			m_a.checkbox->SetValue(false);
+		}
+	}
+	else
+	{
+		auto_dialog = false;
+	}
+
+	//Quickspin
+	if (m_quickspin.checkbox->IsChecked())
+	{
+		m_main_stick.x_cont.text->SetValue(std::to_string(194));
+		m_main_stick.y_cont.text->SetValue(std::to_string(191));
+
+		quickspin_enabled = true;
+		quickspin_timer = Movie::g_currentFrame;
+		m_quickspin.checkbox->SetValue(false);
+	}
+	else if (quickspin_enabled)
+	{
+		if (Movie::g_currentFrame == quickspin_timer + 1)
+		{
+			m_main_stick.x_cont.text->SetValue(std::to_string(208));
+			m_main_stick.y_cont.text->SetValue(std::to_string(81));
+		}
+		else if (Movie::g_currentFrame == quickspin_timer + 2)
+		{
+			m_main_stick.x_cont.text->SetValue(std::to_string(122));
+			m_main_stick.y_cont.text->SetValue(std::to_string(31));
+		}
+		else if (Movie::g_currentFrame == quickspin_timer + 3)
+		{
+			m_main_stick.x_cont.text->SetValue(std::to_string(50));
+			m_main_stick.y_cont.text->SetValue(std::to_string(89));
+		}
+		else if (Movie::g_currentFrame == quickspin_timer + 4)
+		{
+			m_main_stick.x_cont.text->SetValue(std::to_string(76));
+			m_main_stick.y_cont.text->SetValue(std::to_string(193));
+		}
+		else if (Movie::g_currentFrame == quickspin_timer + 5)
+		{
+			m_main_stick.x_cont.text->SetValue(std::to_string(198));
+			m_main_stick.y_cont.text->SetValue(std::to_string(185));
+			m_b.checkbox->SetValue(true);
+		}
+		else if (Movie::g_currentFrame == quickspin_timer + 6)
+		{
+			m_main_stick.x_cont.text->SetValue(std::to_string(128));
+			m_main_stick.y_cont.text->SetValue(std::to_string(128));
+			m_b.checkbox->SetValue(false);
+
+			quickspin_enabled = false;
+		}
+	}
+
+	//Roll Assist
+	if (Movie::checkSave)
+	{
+		m_rollassist.checkbox->SetValue(true);
+		Movie::checkSave = false;
+		Movie::uncheckSave = false;
+	}
+	else if (Movie::uncheckSave)
+	{
+		m_rollassist.checkbox->SetValue(false);
+		Movie::checkSave = false;
+		Movie::uncheckSave = false;
+	}
+
+	if (m_rollassist.checkbox->IsChecked() && !Movie::roll_enabled)
+	{
+		if (isTP || isTWW)
+		{
+			Movie::roll_enabled = true;
+			Movie::roll_timer = Movie::g_currentFrame;
+		}
+
+		if (isTP)
+			Movie::first_roll = true;
+		else
+			Movie::first_roll = false;
+	}
+	if (!m_rollassist.checkbox->IsChecked())
+	{
+		Movie::roll_enabled = false;
+	}
+	if (Movie::roll_enabled)
+	{
+		if (Movie::roll_timer == -1)
+			Movie::roll_timer = Movie::g_currentFrame;
+
+		if (isTP)
+		{
+			u8 eventFlag = Memory::Read_U8(eventFlagAdd);
+			u32 isLoading = Memory::Read_U32(isLoadingAdd);
+
+			if (eventFlag == 1 || isLoading > 0 || m_main_stick.x_cont.value == 128 && m_main_stick.y_cont.value == 128) //Reset rolling during loading or cutscenes
+			{
+				Movie::first_roll = true;
+				Movie::roll_timer = Movie::g_currentFrame + 1;
+				m_a.checkbox->SetValue(false);
+			}
+			if (Movie::first_roll)
+			{
+				if (Movie::g_currentFrame == Movie::roll_timer)
+				{
+					m_a.checkbox->SetValue(true);
+				}
+				else if (Movie::g_currentFrame == Movie::roll_timer + 1)
+				{
+					m_a.checkbox->SetValue(false);
+				}
+				else if (Movie::g_currentFrame == Movie::roll_timer + 23) //22 would be ideal, but terrain...
+				{
+					m_a.checkbox->SetValue(true);
+				}
+				else if (Movie::g_currentFrame == Movie::roll_timer + 24)
+				{
+					m_a.checkbox->SetValue(false);
+					Movie::first_roll = false;
+					Movie::roll_timer = Movie::g_currentFrame - 1;
+				}
+			}
+			else
+			{
+				if (Movie::g_currentFrame == Movie::roll_timer + 20) //19 would be ideal, but terrain...
+				{
+					m_a.checkbox->SetValue(true);
+				}
+				else if (Movie::g_currentFrame == Movie::roll_timer + 21)
+				{
+					m_a.checkbox->SetValue(false);
+					Movie::roll_timer = Movie::g_currentFrame - 1;
+				}
+			}
+		}
+
+		if (isTWW)
+		{
+			u8 eventFlag = Memory::Read_U8(eventFlagAdd);
+			u8 isLoading = Memory::Read_U8(isLoadingAdd);
+			u32 characterpointer = Memory::Read_U32(charPointerAdd);
+
+			if (characterpointer > 0x80000000)
+			{
+				characterpointer -= 0x80000000;
+
+				float LinkSpeed = Memory::Read_F32(characterpointer + 0x34e4);
+
+				if (isLoading > 0 || m_main_stick.x_cont.value == 128 && m_main_stick.y_cont.value == 128 || LinkSpeed < 13.590374) //Reset rolling during loading or idle or not enough speed
+				{
+					Movie::first_roll = false;
+					Movie::roll_timer = Movie::g_currentFrame + 1;
+					m_a.checkbox->SetValue(false);
+				}
+				else
+				{
+					if (Movie::g_currentFrame == Movie::roll_timer)
+					{
+						m_a.checkbox->SetValue(true);
+					}
+					else if (Movie::g_currentFrame == Movie::roll_timer + 1)
+					{
+						m_a.checkbox->SetValue(false);
+						Movie::roll_timer = Movie::g_currentFrame + 15; //16 to 15
+					}
+				}
+			}
+			else
+			{
+				Movie::first_roll = false;
+				Movie::roll_timer = Movie::g_currentFrame + 1;
+				m_a.checkbox->SetValue(false);
+			}
+		}
+	}
+
+	//Superswim Script
+	if (Movie::swimStarted && !Movie::swimInProgress) //Start Superswim
+	{
+		//Dragonbane: Give instance of class
+		luaInstance = this;
+
+		luaState = luaL_newstate();
+
+		luaL_openlibs(luaState);
+
+		//Make functions available to Lua programs
+		lua_register(luaState, "ReadValue8", ReadValue8);
+		lua_register(luaState, "ReadValue16", ReadValue16);
+		lua_register(luaState, "ReadValue32", ReadValue32);
+		lua_register(luaState, "ReadValueFloat", ReadValueFloat);
+		lua_register(luaState, "ReadValueString", ReadValueString);
+		lua_register(luaState, "GetPointerNormal", GetPointerNormal);
+
+		lua_register(luaState, "WriteValue8", WriteValue8);
+		lua_register(luaState, "WriteValue16", WriteValue16);
+		lua_register(luaState, "WriteValue32", WriteValue32);
+		lua_register(luaState, "WriteValueFloat", WriteValueFloat);
+		lua_register(luaState, "WriteValueString", WriteValueString);
+
+		lua_register(luaState, "PressButton", PressButton);
+		lua_register(luaState, "ReleaseButton", ReleaseButton);
+		lua_register(luaState, "SetMainStickX", SetMainStickX);
+		lua_register(luaState, "SetMainStickY", SetMainStickY);
+		lua_register(luaState, "SetCStickX", SetCStickX);
+		lua_register(luaState, "SetCStickY", SetCStickY);
+
+		lua_register(luaState, "GetFrameCount", GetFrameCount);
+		lua_register(luaState, "MsgBox", MsgBox);
+		lua_register(luaState, "AbortSwim", AbortSwim);
+
+		std::string file = File::GetExeDirectory() + "\\Scripts\\Superswim.lua";
+
+		int status = luaL_dofile(luaState, file.c_str());
+
+		if (status == 0)
+		{
+			//Execute Start function
+			lua_getglobal(luaState, "startSwim");
+
+			lua_pushnumber(luaState, Movie::swimDestPosX);
+			lua_pushnumber(luaState, Movie::swimDestPosZ);
+
+			status = lua_pcall(luaState, 2, LUA_MULTRET, 0);
+		}
+		
+		if (status != 0)
+		{
+			HandleLuaErrors(luaState, status);
+			lua_close(luaState);
+
+			Movie::swimStarted = false;
+		}
+
+		Movie::swimInProgress = true;
+	}
+	else if (!Movie::swimStarted && Movie::swimInProgress) 	//Cancel Superswim
+	{
+		lua_getglobal(luaState, "cancelSwim");
+
+		int status = lua_pcall(luaState, 0, LUA_MULTRET, 0);
+
+		if (status != 0)
+		{
+			HandleLuaErrors(luaState, status);
+		}
+
+		lua_close(luaState);
+
+		Movie::swimInProgress = false;
+	}
+	else if (Movie::swimStarted && Movie::swimInProgress) //Call Update function
+	{ 
+		lua_getglobal(luaState, "updateSwim");
+
+		int status = lua_pcall(luaState, 0, LUA_MULTRET, 0);
+
+		if (status != 0)
+		{
+			HandleLuaErrors(luaState, status);
+
+			lua_close(luaState);
+
+			Movie::swimInProgress = false;
+			Movie::swimStarted = false;
+		}
+	}
+}
+
