@@ -116,6 +116,7 @@ bool updateMainFrame = false;
 u8 tunerActionID = 0;
 u8 tunerExecuteID = 0;
 u8 tunerStatus = 1;
+static u8 s_numGBAs; //Dragonbane
 
 
 static u8 s_numPads = 0;
@@ -904,6 +905,13 @@ bool IsUsingBongo(int controller)
 	return ((s_bongos & (1 << controller)) != 0);
 }
 
+//Dragonbane
+bool IsUsingGBA(int controller)
+{
+	return ((s_numGBAs & (1 << controller)) != 0);
+}
+
+
 bool IsUsingWiimote(int wiimote)
 {
 	return ((s_numPads & (1 << (wiimote + 4))) != 0);
@@ -1010,6 +1018,8 @@ bool BeginRecordingInput(int controllers)
 	bool was_unpaused = Core::PauseAndLock(true);
 
 	justStoppedRecording = false; //Dragonbane
+	tunerActionID = 0;
+	tunerExecuteID = 0;
 
 	s_numPads = controllers;
 	g_currentFrame = g_totalFrames = 0;
@@ -1018,6 +1028,7 @@ bool BeginRecordingInput(int controllers)
 	s_totalTickCount = s_tickCountAtLastInput = 0;
 	
 	s_bongos = 0;
+	s_numGBAs = 0; //Dragonbane
 	s_memcards = 0;
 	if (NetPlay::IsNetPlayRunning())
 	{
@@ -1035,6 +1046,8 @@ bool BeginRecordingInput(int controllers)
 	for (int i = 0; i < MAX_SI_CHANNELS; ++i)
 		if (SConfig::GetInstance().m_SIDevice[i] == SIDEVICE_GC_TARUKONGA)
 			s_bongos |= (1 << i);
+		else if(SConfig::GetInstance().m_SIDevice[i] == SIDEVICE_GC_GBA) //Dragonbane
+			s_numGBAs |= (1 << i);
 
 	if (Core::IsRunningAndStarted())
 	{
@@ -1587,6 +1600,7 @@ void ReadHeader()
 		g_bClearSave = tmpHeader.bClearSave;
 		s_memcards = tmpHeader.memcards;
 		s_bongos = tmpHeader.bongos;
+		s_numGBAs = tmpHeader.numGBAs; //Dragonbane
 		s_bSyncGPU = tmpHeader.bSyncGPU;
 		s_bNetPlay = tmpHeader.bNetPlay;
 		memcpy(s_revision, tmpHeader.revision, ArraySize(s_revision));
@@ -1637,9 +1651,12 @@ bool PlayInput(const std::string& filename)
 	g_currentInputCount = 0;
 
 	s_playMode = MODE_PLAYING;
+
 	isVerifying = false; //Dragonbane
 	isAutoVerifying = false;
 	justStoppedRecording = false;
+	tunerActionID = 0;
+	tunerExecuteID = 0;
 
 	Core::UpdateWantDeterminism();
 
@@ -2530,6 +2547,7 @@ void SaveRecording(const std::string& filename)
 	strncpy((char *)header.author, s_author.c_str(),ArraySize(header.author));
 	memcpy(header.md5,s_MD5,16);
 	header.bongos = s_bongos;
+	header.numGBAs = s_numGBAs; //Dragonbane
 	memcpy(header.revision, s_revision, ArraySize(header.revision));
 	header.DSPiromHash = s_DSPiromHash;
 	header.DSPcoefHash = s_DSPcoefHash;

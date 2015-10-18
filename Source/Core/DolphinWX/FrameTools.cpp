@@ -901,6 +901,7 @@ void CFrame::OnRecord(wxCommandEvent& WXUNUSED (event))
 			controllers |= (1 << (i + 4));
 	}
 
+	//Dragonbane
 	if (Core::IsRunningAndStarted())
 	{
 		GetMenuBar()->FindItem(IDM_RECORD)->Enable(false);
@@ -909,7 +910,6 @@ void CFrame::OnRecord(wxCommandEvent& WXUNUSED (event))
 		GetMenuBar()->FindItem(IDM_RECORD_EXPORT)->Enable(true);
 		GetMenuBar()->FindItem(IDM_RECORD_STOP)->Enable(true);
 	}
-
 
 	if (Movie::BeginRecordingInput(controllers))
 		BootGame("");
