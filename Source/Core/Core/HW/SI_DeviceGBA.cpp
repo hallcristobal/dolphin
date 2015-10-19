@@ -2481,7 +2481,7 @@ int GBASockServer::CreateFakeResponse(u8* si_buffer)
 						}
 					}
 
-					if (Movie::tunerExecuteID > 0 && !tingleRNG)
+					if (Movie::tunerExecuteID > 0 && !tingleRNG && !inLoading) //Do Action
 					{
 						actionPhase = 1;
 						localConnectionPhase = 0;
@@ -2514,17 +2514,23 @@ int GBASockServer::CreateFakeResponse(u8* si_buffer)
 							{
 								inLoading = true;
 								actionPhase = 2;
+								frameTarget = Movie::g_currentFrame - 1;
 							}
 							else
 							{
 								if (inLoading)
 								{
-									actionPhase = 2;
-
 									if (eventFlag == 0)
 									{
-										inLoading = false;
-										Movie::tunerExecuteID = 24; //Send Tingle Nothing without a fee
+										if (Movie::g_currentFrame > frameTarget)
+										{
+											inLoading = false;
+											Movie::tunerExecuteID = 9; //Send a Cursor Reset Command
+										}
+									}
+									else
+									{
+										frameTarget = Movie::g_currentFrame + 30;
 									}
 								}
 							}

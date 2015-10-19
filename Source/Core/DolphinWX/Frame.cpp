@@ -1054,9 +1054,10 @@ void OnStoppedCallback()
 
 void GCTASManipFunction(GCPadStatus* PadStatus, int controllerID)
 {
-	if (main_frame) //&& !State::IsStateOperationInProgress()) //Dragonbane: Freeze protection
+	if (main_frame)
 	{
 		main_frame->g_TASInputDlg[controllerID]->GetValues(PadStatus);
+		main_frame->g_TWWTunerInput->UpdateButtons(); //Dragonbane
 	}
 }
 

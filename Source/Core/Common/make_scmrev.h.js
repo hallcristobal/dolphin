@@ -64,9 +64,9 @@ function GetFileContents(f)
 //Dragonbane
 var gitexe = GetGitExe();
 var revision	= GetFirstStdOutLine(gitexe + cmd_revision);
-var describe = "4.0-8034 [Zelda Edition 5.0]";
-var branch		= GetFirstStdOutLine(gitexe + cmd_branch);
-var isMaster	= +("master" == branch);
+var describe = "4.0-5371 [Zelda Edition 5.0]";
+var branch		= ""; //GetFirstStdOutLine(gitexe + cmd_branch);
+var isStable = 1; //+("master" == branch || "stable" == branch);
 
 // remove hash (and trailing "-0" if needed) from description
 //describe = describe.replace(/(-0)?-[^-]+(-dirty)?$/, '$2');
