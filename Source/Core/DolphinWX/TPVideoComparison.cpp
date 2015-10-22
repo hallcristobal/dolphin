@@ -313,7 +313,7 @@ void TPVideoComparison::OnButtonPressed(wxCommandEvent& event)
 		std::string leftTitle = WxStrToStr(titleLeft->GetValue());
 		std::string rightTitle = WxStrToStr(titleRight->GetValue());
 
-		if (SConfig::GetInstance().m_strVideoBackend.compare("Direct3D") && SConfig::GetInstance().m_strVideoBackend.compare("D3D"))
+		if (SConfig::GetInstance().m_LocalCoreStartupParameter.m_strVideoBackend.compare("Direct3D") && SConfig::GetInstance().m_LocalCoreStartupParameter.m_strVideoBackend.compare("D3D"))
 		{
 			wxMessageBox("Comparison videos are currently only supported if you use the Direct3D renderer/backend!");
 			return;

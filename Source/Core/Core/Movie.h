@@ -153,8 +153,7 @@ struct DTMHeader
 	u8   numGBAs;			//Dragonbane
 	bool bSyncGPU;
 	bool bNetPlay;
-	bool bPAL60;
-	u8   reserved[11];      // Padding for any new config options
+	u8   reserved[12];      // Padding for any new config options
 	u8   discChange[40];    // Name of iso file to switch to, for two disc games.
 	u8   revision[20];      // Git hash
 	u32  DSPiromHash;

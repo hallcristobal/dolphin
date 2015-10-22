@@ -273,7 +273,7 @@ void TWWSuperswim::OnButtonPressed(wxCommandEvent& event)
 	if (!Core::IsRunningAndStarted())
 		return;
 
-	std::string gameID = SConfig::GetInstance().GetUniqueID();
+	std::string gameID = SConfig::GetInstance().m_LocalCoreStartupParameter.GetUniqueID();
 	u32 charPointerAdd;
 	bool isTWW = false;
 

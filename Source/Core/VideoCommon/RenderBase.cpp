@@ -431,7 +431,7 @@ void Renderer::DrawDebugText()
 		g_renderer->RenderText("PLAYBACK", 20, 0, 0xFF00FF00);
 	}
 
-	std::string gameID = SConfig::GetInstance().GetUniqueID();
+	std::string gameID = SConfig::GetInstance().m_LocalCoreStartupParameter.GetUniqueID();
 	if (!gameID.compare("GZLJ01"))
 	{
 		std::string tunerInfo = "Tuner Status: ";

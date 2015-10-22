@@ -603,7 +603,7 @@ void TASInputDlg::CreateGCLayout()
 	bottom_box->Add(shoulder_box, 0, wxLEFT | wxRIGHT, 5);
 	bottom_box->Add(m_buttons_box, 0, wxBOTTOM, 5);
 
-	//Dragonban
+	//Dragonbane
 	bottom_box->Add(m_buttons_extra, 0, wxLEFT | wxRIGHT | wxBOTTOM, 5);
 
 	main_szr->Add(top_box);

@@ -703,7 +703,7 @@ void TPSavefileManager::OnSelectionChanged(wxCommandEvent& event)
 
 		//Open Room File
 		std::string fullPath = StringFromFormat("res/Stage/%s/R%s_00.arc", selectedStage.c_str(), roomString.c_str());
-		std::string ISOPath = SConfig::GetInstance().m_strFilename;
+		std::string ISOPath = SConfig::GetInstance().m_LocalCoreStartupParameter.m_strFilename;
 
 		static DiscIO::IVolume *OpenISO = nullptr;
 		static DiscIO::IFileSystem *pFileSystem = nullptr;

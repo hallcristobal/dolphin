@@ -152,7 +152,7 @@ void TWWTunerInput::UpdateButtons()
 	if (!Core::IsRunningAndStarted())
 		return;
 
-	std::string gameID = SConfig::GetInstance().GetUniqueID();
+	std::string gameID = SConfig::GetInstance().m_LocalCoreStartupParameter.GetUniqueID();
 
 	if (gameID.compare("GZLJ01") && gameID.compare("GZLE01") && gameID.compare("GZLP01"))
 		return;
@@ -222,7 +222,7 @@ void TWWTunerInput::OnButtonPressed(wxCommandEvent& event)
 			return;
 		}
 
-		std::string gameID = SConfig::GetInstance().GetUniqueID();
+		std::string gameID = SConfig::GetInstance().m_LocalCoreStartupParameter.GetUniqueID();
 
 		if (gameID.compare("GZLJ01") && gameID.compare("GZLE01") && gameID.compare("GZLP01"))
 		{

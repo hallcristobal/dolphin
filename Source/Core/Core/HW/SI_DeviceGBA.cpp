@@ -2503,7 +2503,7 @@ int GBASockServer::CreateFakeResponse(u8* si_buffer)
 						isLoadingAdd = 0x3ad335;
 						eventFlagAdd = 0x3bd3a2;
 
-						std::string gameID = SConfig::GetInstance().GetUniqueID();
+						std::string gameID = SConfig::GetInstance().m_LocalCoreStartupParameter.GetUniqueID();
 
 						if (!gameID.compare("GZLJ01"))
 						{
@@ -4155,8 +4155,8 @@ void CSIDevice_GBA::DoState(PointerWrap& p)
 	p.Do(actionDataMode);
 
 	//Connection Variables
-	//p.Do(waiting_for_response);
-	//p.Do(send_data);
-	//p.Do(num_data_received);
-	//p.Do(timestamp_sent);	
+	p.Do(waiting_for_response);
+	p.Do(send_data);
+	p.Do(num_data_received);
+	p.Do(timestamp_sent);	
 }

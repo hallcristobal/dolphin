@@ -1,3 +1,4 @@
+
 var wshShell		= new ActiveXObject("WScript.Shell")
 var oFS				= new ActiveXObject("Scripting.FileSystemObject");
 
