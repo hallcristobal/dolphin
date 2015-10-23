@@ -443,8 +443,10 @@ void Renderer::DrawDebugText()
 		else if (Movie::tunerStatus == 2)
 			tunerInfo.append("Ready");
 		else if (Movie::tunerStatus == 3)
-			tunerInfo.append("Calling");
+			tunerInfo.append("Connecting");
 		else if (Movie::tunerStatus == 4)
+			tunerInfo.append("Calling");
+		else if (Movie::tunerStatus == 5)
 			tunerInfo.append("Connected");
 		else
 			tunerInfo.append("N/A");

@@ -46,7 +46,8 @@ const u64 BYTES_PER_SECOND = BITS_PER_SECOND / 8;
 
 //Dragonbane: Custom Tuner Stuff
 
-static File::IOFile outputFile("C:\\DolphinExport\\GBA.log", "wb");
+//LOG FILE
+//static File::IOFile outputFile("C:\\DolphinExport\\GBA.log", "wb");
 static u64 frameTarget = 0;
 
 //Connection variables
@@ -444,6 +445,7 @@ int GBASockServer::CreateFakeResponse(u8* si_buffer)
 	outputFile.WriteBytes(output.data(), output.size());
 	*/
 
+
 	/*
 	if (!nextRNGBlocking)
 	{
@@ -479,6 +481,9 @@ int GBASockServer::CreateFakeResponse(u8* si_buffer)
 	}
 	*/
 
+
+	//REPORT CODE FOR PROFILING
+	/*
 	bool reportEnd = false;
 
 	if (Movie::tunerExecuteID > 0 && Movie::tunerExecuteID < 18 || Movie::tunerExecuteID > 19)
@@ -549,33 +554,69 @@ int GBASockServer::CreateFakeResponse(u8* si_buffer)
 			reportedActionID = 0;
 		}
 	}
+	*/
 
 
+
+	//Handle Connection Status updates
 	if (isConnected)
 	{
 		if (cmd == CMD_RESET)
 		{
 			isConnected = false;
-			idlePhase = true;
-			isConnecting = true;
+			isConnecting = false;
+
+			recv_data[0] = 0x00;
+			recv_data[1] = 0x04;
+			recv_data[2] = 0x08;
+
+			num_received = 3;
 		}
 	}
 	else
 	{
 		if (!isConnecting)
 		{
-			idlePhase = true;
-			isConnecting = true;
+			if (cmd == CMD_STATUS) //Wait for STATUS before idling again (multiple resets in a row are possible!)
+			{
+				idlePhase = true;
+				isConnecting = true;
+			}
+			else if (cmd == CMD_RESET) //Handle multiple resets
+			{
+				recv_data[0] = 0x00;
+				recv_data[1] = 0x04;
+				recv_data[2] = 0x08;
+
+				num_received = 3;
+			}
+		}
+		else //Handles user reset during connection process
+		{
+			if (!idlePhase && (globalConnectionPhase == 2 || globalConnectionPhase >= 10))
+			{
+				if (cmd == CMD_STATUS || cmd == CMD_RESET) //No resets or status requests are expected during connection process
+				{
+					isConnecting = false;
+					globalConnectionPhase = 0;
+
+					recv_data[0] = 0x00;
+					recv_data[1] = 0x04;
+					recv_data[2] = 0x08;
+
+					num_received = 3;
+				}
+			}
 		}
 	}
 
 
 	//CONNECTION PHASE
-	if (isConnecting)
+    if (isConnecting)
 	{
 		if (idlePhase)
 		{
-			Movie::tunerStatus = 2;
+			Movie::tunerStatus = 2; //Ready
 
 			if (cmd == CMD_STATUS)
 			{
@@ -594,7 +635,7 @@ int GBASockServer::CreateFakeResponse(u8* si_buffer)
 				num_received = 3;
 				idlePhase = false;
 				globalConnectionPhase = 0;
-				Movie::tunerStatus = 3;
+				Movie::tunerStatus = 3; //Connecting
 			}
 
 		}
@@ -623,18 +664,7 @@ int GBASockServer::CreateFakeResponse(u8* si_buffer)
 		}
 		else if (globalConnectionPhase == 2)
 		{
-			if (cmd == CMD_STATUS || cmd == CMD_RESET)
-			{
-				globalConnectionPhase = 0;
-				idlePhase = true;
-
-				recv_data[0] = 0x00;
-				recv_data[1] = 0x04;
-				recv_data[2] = 0x08;
-
-				num_received = 3;
-			}
-			else if (cmd == CMD_READ)
+			if (cmd == CMD_READ)
 			{
 				recv_data[0] = 0x2e;
 				recv_data[1] = 0xd8;
@@ -714,7 +744,7 @@ int GBASockServer::CreateFakeResponse(u8* si_buffer)
 
 				num_received = 3;
 			}
-			if (cmd == CMD_RESET)
+			if (cmd == CMD_RESET) //2nd official reset
 			{
 				recv_data[0] = 0x00;
 				recv_data[1] = 0x04;
@@ -818,8 +848,10 @@ int GBASockServer::CreateFakeResponse(u8* si_buffer)
 			}
 
 		}
-		else if (globalConnectionPhase == 10)
+		else if (globalConnectionPhase == 10) //Start of calling procedure 
 		{
+			Movie::tunerStatus = 4; //Calling
+
 			if (localConnectionPhase == 0)
 			{
 				recv_data[0] = 0xfe;
@@ -2412,8 +2444,7 @@ int GBASockServer::CreateFakeResponse(u8* si_buffer)
 
 	if (isConnected)
 	{
-
-		Movie::tunerStatus = 4;
+		Movie::tunerStatus = 5; //Connected
 
 		if (actionPhase == -1)
 		{
@@ -4036,7 +4067,7 @@ int CSIDevice_GBA::RunBuffer(u8* _pBuffer, int _iLength)
 		actionPhase = 0;
 		actionDataMode = 0;
 		Movie::tunerExecuteID = 0;
-		Movie::tunerStatus = 1;
+		Movie::tunerStatus = 1; //Enabled
 	}
 	else if (Movie::tunerExecuteID == 19) //Deactivate fake GBA
 	{
@@ -4048,7 +4079,7 @@ int CSIDevice_GBA::RunBuffer(u8* _pBuffer, int _iLength)
 		waiting_for_response = false;
 
 		Movie::tunerExecuteID = 0;
-		Movie::tunerStatus = 0;
+		Movie::tunerStatus = 0; //Disabled
 	}
 
 

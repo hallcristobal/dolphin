@@ -115,7 +115,7 @@ bool updateMainFrame = false;
 //Tuner Stuff
 u8 tunerActionID = 0;
 u8 tunerExecuteID = 0;
-u8 tunerStatus = 1;
+u8 tunerStatus = 0; //Disabled by default
 static u8 s_numGBAs; //Dragonbane
 
 
@@ -1738,8 +1738,9 @@ void DoState(PointerWrap &p)
 		checkSave = false;
 	}
 
-	//Dragonbane: Save current Tuner Action ID
-	p.Do(tunerExecuteID);
+	//Dragonbane: Tuner Stuff
+	p.Do(tunerExecuteID); //Save current Tuner Action ID
+	p.Do(tunerStatus); //Save Tuner Status for Display
 }
 
 void LoadInput(const std::string& filename)
