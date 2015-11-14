@@ -108,6 +108,11 @@ extern u8 tunerActionID;
 extern u8 tunerExecuteID;
 extern u8 tunerStatus;
 
+//Dragonbane: LUA Savestate support
+extern bool lua_isStateOperation;
+extern bool lua_isStateSaved;
+extern bool lua_isStateLoaded;
+
 
 #pragma pack(push,1)
 struct DTMHeader

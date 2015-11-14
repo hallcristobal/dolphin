@@ -65,6 +65,8 @@ class TASInputDlg : public wxDialog
 		void iSetMainStickY(int yVal);
 		void iSetCStickX(int xVal);
 		void iSetCStickY(int yVal);
+		void iSaveState(bool toSlot, int slotID, std::string fileName);
+		void iLoadState(bool fromSlot, int slotID, std::string fileName);
 
 	private:
 		const int ID_C_STICK = 1001;
@@ -106,6 +108,15 @@ class TASInputDlg : public wxDialog
 
 		//Dragonbane
 		void ExecuteScripts();
+		void OnSaveState(wxCommandEvent& event);
+		void OnLoadState(wxCommandEvent& event);
+
+		struct StateEvent
+		{
+			bool useSlot = false;
+			int slotID = 0;
+			std::string fileName = "";
+		};
 
 		Stick CreateStick(int id_stick, int xRange, int yRange, u32 defaultX, u32 defaultY, bool reverseX, bool reverseY);
 		wxStaticBoxSizer* CreateStickLayout(Stick* tempStick, const wxString& title);
@@ -121,6 +132,7 @@ class TASInputDlg : public wxDialog
 
 		//Dragonbane
 		Button m_reset, m_quickspin, m_rollassist, m_skipDialog;
+		StateEvent m_stateData;
 
 		Button* m_buttons[18]; //Original: 17
 		Control* m_controls[10];

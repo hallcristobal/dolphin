@@ -118,6 +118,11 @@ u8 tunerExecuteID = 0;
 u8 tunerStatus = 0; //Disabled by default
 static u8 s_numGBAs; //Dragonbane
 
+//LUA Stuff
+bool lua_isStateOperation = false;
+bool lua_isStateSaved = false;
+bool lua_isStateLoaded = false;
+
 
 static u8 s_numPads = 0;
 static ControllerState s_padState;

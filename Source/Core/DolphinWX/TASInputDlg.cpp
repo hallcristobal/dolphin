@@ -38,9 +38,13 @@
 
 #include <lua.hpp> //Dragonbane
 
+
 //Dragonbane: Lua Stuff
 static TASInputDlg *luaInstance;
 static lua_State *luaState;
+
+wxDEFINE_EVENT(SAVESTATE_EVENT, wxCommandEvent);
+wxDEFINE_EVENT(LOADSTATE_EVENT, wxCommandEvent);
 
 //Lua Functions
 int ReadValue8(lua_State *L)
@@ -301,6 +305,61 @@ int SetCStickY(lua_State *L)
 	return 0;
 }
 
+int SaveState(lua_State *L)
+{
+	int argc = lua_gettop(L);
+
+	if (argc < 2)
+		return 0;
+
+	bool useSlot = false;
+
+	BOOL Slot = lua_toboolean(L, 1);
+	int slotID = lua_tointeger(L, 2);
+	std::string string = "";
+
+	if (Slot)
+		useSlot = true;
+	
+	if (argc > 2)
+	{
+		const char* fileName = lua_tostring(L, 3);
+		string = StringFromFormat("%s", fileName);
+	}
+
+	luaInstance->iSaveState(useSlot, slotID, string);
+
+	return 0; // number of return values
+}
+
+int LoadState(lua_State *L)
+{
+	int argc = lua_gettop(L);
+
+	if (argc < 2)
+		return 0;
+
+	bool useSlot = false;
+
+	BOOL Slot = lua_toboolean(L, 1);
+	int slotID = lua_tointeger(L, 2);
+	std::string string = "";
+
+	if (Slot)
+		useSlot = true;
+
+	if (argc > 2)
+	{
+		const char* fileName = lua_tostring(L, 3);
+		string = StringFromFormat("%s", fileName);
+	}
+
+	luaInstance->iLoadState(useSlot, slotID, string);
+
+	return 0; // number of return values
+}
+
+
 int GetFrameCount(lua_State *L)
 {
 	int argc = lua_gettop(L);
@@ -390,6 +449,10 @@ void TASInputDlg::CreateBaseLayout()
 
 	Bind(wxEVT_CLOSE_WINDOW, &TASInputDlg::OnCloseWindow, this);
 	Bind(wxEVT_TEXT, &TASInputDlg::UpdateFromText, this);
+
+	//Required as Savestate operations need to be carried out on the GUI thread to prevent deadlocks
+	Bind(SAVESTATE_EVENT, &TASInputDlg::OnSaveState, this);
+	Bind(LOADSTATE_EVENT, &TASInputDlg::OnLoadState, this);
 }
 
 const int TASInputDlg::m_gc_pad_buttons_bitmask[12] = {
@@ -1355,6 +1418,74 @@ void TASInputDlg::iSetCStickY(int yVal)
 {
 	m_c_stick.y_cont.text->SetValue(std::to_string(yVal));
 }
+void TASInputDlg::iSaveState(bool toSlot, int slotID, std::string fileName)
+{
+	Movie::lua_isStateOperation = true;
+	Movie::lua_isStateSaved = false;
+	Movie::lua_isStateLoaded = false;
+
+	if (wxIsMainThread())
+	{
+		if (toSlot)
+			State::Save(slotID);
+		else
+			State::SaveAs(File::GetUserPath(D_STATESAVES_IDX) + fileName);
+	}
+	else
+	{
+		m_stateData.useSlot = toSlot;
+		m_stateData.slotID = slotID;
+		m_stateData.fileName = fileName;
+
+		wxCommandEvent* evt = new wxCommandEvent(SAVESTATE_EVENT);
+		evt->SetClientData(&m_stateData);
+		wxQueueEvent(this, evt);
+	}
+}
+void TASInputDlg::iLoadState(bool fromSlot, int slotID, std::string fileName)
+{
+	Movie::lua_isStateOperation = true;
+	Movie::lua_isStateSaved = false;
+	Movie::lua_isStateLoaded = false;
+
+	if (wxIsMainThread())
+	{
+		if (fromSlot)
+			State::Load(slotID);
+		else
+			State::LoadAs(File::GetUserPath(D_STATESAVES_IDX) + fileName);
+	}
+	else
+	{
+		m_stateData.useSlot = fromSlot;
+		m_stateData.slotID = slotID;
+		m_stateData.fileName = fileName;
+
+		wxCommandEvent* evt = new wxCommandEvent(LOADSTATE_EVENT);
+		evt->SetClientData(&m_stateData);
+		wxQueueEvent(this, evt);
+	}
+}
+
+void TASInputDlg::OnSaveState(wxCommandEvent& event)
+{
+	StateEvent* info = static_cast<StateEvent*>(event.GetClientData());
+
+	if (info->useSlot)
+		State::Save(info->slotID);
+	else
+		State::SaveAs(File::GetUserPath(D_STATESAVES_IDX) + info->fileName);
+}
+
+void TASInputDlg::OnLoadState(wxCommandEvent& event)
+{
+	StateEvent* info = static_cast<StateEvent*>(event.GetClientData());
+
+	if (info->useSlot)
+		State::Load(info->slotID);
+	else
+		State::LoadAs(File::GetUserPath(D_STATESAVES_IDX) + info->fileName);
+}
 
 
 //Dragonbane: Custom Scripts
@@ -1618,6 +1749,11 @@ void TASInputDlg::ExecuteScripts()
 
 		luaL_openlibs(luaState);
 
+		//Reset vars
+		Movie::lua_isStateOperation = false;
+		Movie::lua_isStateSaved = false;
+		Movie::lua_isStateLoaded = false;
+
 		//Make functions available to Lua programs
 		lua_register(luaState, "ReadValue8", ReadValue8);
 		lua_register(luaState, "ReadValue16", ReadValue16);
@@ -1638,6 +1774,9 @@ void TASInputDlg::ExecuteScripts()
 		lua_register(luaState, "SetMainStickY", SetMainStickY);
 		lua_register(luaState, "SetCStickX", SetCStickX);
 		lua_register(luaState, "SetCStickY", SetCStickY);
+
+		lua_register(luaState, "SaveState", SaveState);
+		lua_register(luaState, "LoadState", LoadState);
 
 		lua_register(luaState, "GetFrameCount", GetFrameCount);
 		lua_register(luaState, "MsgBox", MsgBox);
@@ -1683,20 +1822,71 @@ void TASInputDlg::ExecuteScripts()
 
 		Movie::swimInProgress = false;
 	}
-	else if (Movie::swimStarted && Movie::swimInProgress) //Call Update function
-	{ 
-		lua_getglobal(luaState, "updateSwim");
-
-		int status = lua_pcall(luaState, 0, LUA_MULTRET, 0);
-
-		if (status != 0)
+	else if (Movie::swimStarted && Movie::swimInProgress)
+	{
+		//LUA Callbacks
+		if (Movie::lua_isStateOperation)
 		{
-			HandleLuaErrors(luaState, status);
+			if (Movie::lua_isStateSaved)
+			{
+				//Saved State Callback
+				lua_getglobal(luaState, "onStateSaved");
 
-			lua_close(luaState);
+				int status = lua_pcall(luaState, 0, LUA_MULTRET, 0);
 
-			Movie::swimInProgress = false;
-			Movie::swimStarted = false;
+				if (status != 0)
+				{
+					HandleLuaErrors(luaState, status);
+
+					lua_close(luaState);
+
+					Movie::swimInProgress = false;
+					Movie::swimStarted = false;
+				}
+
+				Movie::lua_isStateOperation = false;
+				Movie::lua_isStateSaved = false;
+				Movie::lua_isStateLoaded = false;
+			}
+			else if (Movie::lua_isStateLoaded)
+			{
+				//Loaded State Callback
+				lua_getglobal(luaState, "onStateLoaded");
+
+				int status = lua_pcall(luaState, 0, LUA_MULTRET, 0);
+
+				if (status != 0)
+				{
+					HandleLuaErrors(luaState, status);
+
+					lua_close(luaState);
+
+					Movie::swimInProgress = false;
+					Movie::swimStarted = false;
+				}
+
+				Movie::lua_isStateOperation = false;
+				Movie::lua_isStateSaved = false;
+				Movie::lua_isStateLoaded = false;
+			}
+		}
+		
+		//Call Update function
+		if (Movie::swimStarted && Movie::swimInProgress)
+		{
+			lua_getglobal(luaState, "updateSwim");
+
+			int status = lua_pcall(luaState, 0, LUA_MULTRET, 0);
+
+			if (status != 0)
+			{
+				HandleLuaErrors(luaState, status);
+
+				lua_close(luaState);
+
+				Movie::swimInProgress = false;
+				Movie::swimStarted = false;
+			}
 		}
 	}
 }

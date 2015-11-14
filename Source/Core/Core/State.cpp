@@ -298,6 +298,11 @@ static void CompressAndDumpState(CompressAndDumpState_args save_args)
 
 	Core::DisplayMessage(StringFromFormat("Saved State to %s", filename.c_str()), 2000);
 	g_compressAndDumpStateSyncEvent.Set();
+
+
+	//Dragonbane:: Callback for LUA
+	if (Movie::lua_isStateOperation)
+		Movie::lua_isStateSaved = true;
 }
 
 void SaveAs(const std::string& filename, bool wait)
@@ -483,6 +488,10 @@ void LoadAs(const std::string& filename)
 				Movie::CancelVerifying();
 				Movie::EndPlayInput(false);
 			}
+
+			//Dragonbane:: Callback for LUA
+			if (Movie::lua_isStateOperation)
+				Movie::lua_isStateLoaded = true;
 		}
 		else
 		{
