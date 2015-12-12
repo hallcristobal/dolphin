@@ -1,5 +1,5 @@
-// Copyright 2013 Dolphin Emulator Project
-// Licensed under GPLv2
+// Copyright 2011 Dolphin Emulator Project
+// Licensed under GPLv2+
 // Refer to the license.txt file included.
 
 #include <cstddef>
@@ -10,425 +10,49 @@
 #include <wx/sizer.h>
 #include <wx/slider.h>
 #include <wx/statbmp.h>
-#include <wx/string.h>
 #include <wx/textctrl.h>
 
-#include <wx/msgdlg.h> //Dragonbane
-
-#include <wx/app.h>
-#include "Core/Core.h"
-#include "Core/CoreParameter.h"
-#include "Core/Boot/Boot.h"
-#include "DolphinWX/Frame.h"
-#include "DolphinWX/Globals.h"
-#include "DolphinWX/Main.h"
+//Dragonbane
+#include <wx/msgdlg.h>
 #include "Core/HW/ProcessorInterface.h"
 #include "Core/HW/Memmap.h"
 
 #include "Common/CommonTypes.h"
 #include "Core/Movie.h"
-#include "Core/State.h"
 #include "Core/HW/Wiimote.h"
 #include "Core/HW/WiimoteEmu/WiimoteEmu.h"
+#include "Core/HW/WiimoteEmu/Attachment/Classic.h"
 #include "Core/HW/WiimoteEmu/Attachment/Nunchuk.h"
 #include "Core/HW/WiimoteReal/WiimoteReal.h"
 #include "DolphinWX/TASInputDlg.h"
 #include "InputCommon/GCPadStatus.h"
 #include "InputCommon/InputConfig.h"
 
-#include <lua.hpp> //Dragonbane
+wxDEFINE_EVENT(INVALIDATE_BUTTON_EVENT, wxCommandEvent);
+wxDEFINE_EVENT(INVALIDATE_CONTROL_EVENT, wxCommandEvent);
 
-
-//Dragonbane: Lua Stuff
-static TASInputDlg *luaInstance;
-static lua_State *luaState;
-
-wxDEFINE_EVENT(SAVESTATE_EVENT, wxCommandEvent);
-wxDEFINE_EVENT(LOADSTATE_EVENT, wxCommandEvent);
-
-//Lua Functions
-int ReadValue8(lua_State *L)
+struct TASWiimoteReport
 {
-	int argc = lua_gettop(L);
-
-	if (argc < 1)
-		return 0;
-
-	u32 address = lua_tointeger(L, 1);
-
-	u8 result = Memory::Read_U8(address);
-
-	lua_pushinteger(L, result); // return value
-	return 1; // number of return values
-}
-
-int ReadValue16(lua_State *L)
-{
-	int argc = lua_gettop(L);
-
-	if (argc < 1)
-		return 0;
-
-	u32 address = lua_tointeger(L, 1);
-
-	u16 result = Memory::Read_U16(address);
-
-	lua_pushinteger(L, result); // return value
-	return 1; // number of return values
-}
-
-int ReadValue32(lua_State *L)
-{
-	int argc = lua_gettop(L);
-
-	if (argc < 1)
-		return 0;
-
-	u32 address = lua_tointeger(L, 1);
-
-	u32 result = Memory::Read_U32(address);
-
-	lua_pushinteger(L, result); // return value
-	return 1; // number of return values
-}
-
-int ReadValueFloat(lua_State *L)
-{
-	int argc = lua_gettop(L);
-
-	if (argc < 1)
-		return 0;
-
-	u32 address = lua_tointeger(L, 1);
-
-	float result = Memory::Read_F32(address);
-
-	lua_pushnumber(L, result); // return value
-	return 1; // number of return values
-}
-int ReadValueString(lua_State *L)
-{
-	int argc = lua_gettop(L);
-
-	if (argc < 2)
-		return 0;
-
-	u32 address = lua_tointeger(L, 1);
-	int count = lua_tointeger(L, 2);
-
-	std::string result = Memory::Read_String(address, count);
-
-	lua_pushstring(L, result.c_str()); // return value
-	return 1; // number of return values
-}
-
-//Write Stuff
-int WriteValue8(lua_State *L)
-{
-	int argc = lua_gettop(L);
-
-	if (argc < 2)
-		return 0;
-
-	u32 address = lua_tointeger(L, 1);
-	u8 value = lua_tointeger(L, 2);
-
-	Memory::Write_U8(value, address);
-
-	return 0; // number of return values
-}
-
-int WriteValue16(lua_State *L)
-{
-	int argc = lua_gettop(L);
-
-	if (argc < 2)
-		return 0;
-
-	u32 address = lua_tointeger(L, 1);
-	u16 value = lua_tointeger(L, 2);
-
-	Memory::Write_U16(value, address);
-
-	return 0; // number of return values
-}
-
-int WriteValue32(lua_State *L)
-{
-	int argc = lua_gettop(L);
-
-	if (argc < 2)
-		return 0;
-
-	u32 address = lua_tointeger(L, 1);
-	u32 value = lua_tointeger(L, 2);
-
-	Memory::Write_U32(value, address);
-
-	return 0; // number of return values
-}
-
-int WriteValueFloat(lua_State *L)
-{
-	int argc = lua_gettop(L);
-
-	if (argc < 2)
-		return 0;
-
-	u32 address = lua_tointeger(L, 1);
-	double value = lua_tonumber(L, 2);
-
-	Memory::Write_F32((float)value, address);
-
-	return 0; // number of return values
-}
-int WriteValueString(lua_State *L)
-{
-	int argc = lua_gettop(L);
-
-	if (argc < 2)
-		return 0;
-
-	u32 address = lua_tointeger(L, 1);
-	const char* value = lua_tostring(L, 2);
-
-	std::string string = StringFromFormat("%s", value);
-
-	Memory::Write_String(string, address);
-
-	return 0; // number of return values
-}
-
-int GetPointerNormal(lua_State *L)
-{
-	int argc = lua_gettop(L);
-
-	if (argc < 1)
-		return 0;
-
-	u32 address = lua_tointeger(L, 1);
-
-	u32 pointer = Memory::Read_U32(address);
-
-	if (pointer > 0x80000000)
-	{
-		pointer -= 0x80000000;
-	}
-	else
-	{
-		return 0;
-	}
-
-	lua_pushinteger(L, pointer); // return value
-	return 1; // number of return values
-}
-
-int PressButton(lua_State *L)
-{
-	int argc = lua_gettop(L);
-
-	if (argc < 1)
-		return 0;
-
-	const char* button = lua_tostring(L, 1);
-
-	luaInstance->iPressButton(button);
-
-	return 0; // number of return values
-}
-
-int ReleaseButton(lua_State *L)
-{
-	int argc = lua_gettop(L);
-
-	if (argc < 1)
-		return 0;
-
-	const char* button = lua_tostring(L, 1);
-
-	luaInstance->iReleaseButton(button);
-
-	return 0; // number of return values
-}
-
-int SetMainStickX(lua_State *L)
-{
-	int argc = lua_gettop(L);
-
-	if (argc < 1)
-		return 0;
-
-	int xPos = lua_tointeger(L, 1);
-
-	luaInstance->iSetMainStickX(xPos);
-
-	return 0;
-}
-int SetMainStickY(lua_State *L)
-{
-	int argc = lua_gettop(L);
-
-	if (argc < 1)
-		return 0;
-
-	int yPos = lua_tointeger(L, 1);
-
-	luaInstance->iSetMainStickY(yPos);
-
-	return 0;
-}
-
-int SetCStickX(lua_State *L)
-{
-	int argc = lua_gettop(L);
-
-	if (argc < 1)
-		return 0;
-
-	int xPos = lua_tointeger(L, 1);
-
-	luaInstance->iSetCStickX(xPos);
-
-	return 0;
-}
-int SetCStickY(lua_State *L)
-{
-	int argc = lua_gettop(L);
-
-	if (argc < 1)
-		return 0;
-
-	int yPos = lua_tointeger(L, 1);
-
-	luaInstance->iSetCStickY(yPos);
-
-	return 0;
-}
-
-int SaveState(lua_State *L)
-{
-	int argc = lua_gettop(L);
-
-	if (argc < 2)
-		return 0;
-
-	bool useSlot = false;
-
-	BOOL Slot = lua_toboolean(L, 1);
-	int slotID = lua_tointeger(L, 2);
-	std::string string = "";
-
-	if (Slot)
-		useSlot = true;
-	
-	if (argc > 2)
-	{
-		const char* fileName = lua_tostring(L, 3);
-		string = StringFromFormat("%s", fileName);
-	}
-
-	luaInstance->iSaveState(useSlot, slotID, string);
-
-	return 0; // number of return values
-}
-
-int LoadState(lua_State *L)
-{
-	int argc = lua_gettop(L);
-
-	if (argc < 2)
-		return 0;
-
-	bool useSlot = false;
-
-	BOOL Slot = lua_toboolean(L, 1);
-	int slotID = lua_tointeger(L, 2);
-	std::string string = "";
-
-	if (Slot)
-		useSlot = true;
-
-	if (argc > 2)
-	{
-		const char* fileName = lua_tostring(L, 3);
-		string = StringFromFormat("%s", fileName);
-	}
-
-	luaInstance->iLoadState(useSlot, slotID, string);
-
-	return 0; // number of return values
-}
-
-
-int GetFrameCount(lua_State *L)
-{
-	int argc = lua_gettop(L);
-
-	lua_pushinteger(L, Movie::g_currentFrame); // return value
-	return 1; // number of return values
-}
-
-int IsGUIThread(lua_State *L)
-{
-	int argc = lua_gettop(L);
-	bool isGUI = luaInstance->iIsGUIThread();
-	BOOL output = isGUI;
-
-	lua_pushboolean(L, output); // return value
-	return 1; // number of return values
-}
-
-int MsgBox(lua_State *L)
-{
-	int argc = lua_gettop(L);
-
-	if (argc < 1)
-		return 0;
-
-	const char* text = lua_tostring(L, 1);
-
-	std::string message = StringFromFormat("Lua Msg: %s", text);
-	wxMessageBox(message);
-
-	return 0; // number of return values
-}
-
-int AbortSwim(lua_State *L)
-{
-	int argc = lua_gettop(L);
-
-	Movie::swimStarted = false;
-
-	return 0; // number of return values
-}
-
-void HandleLuaErrors(lua_State *L, int status)
-{
-	if (status != 0)
-	{
-		std::string message = StringFromFormat("Lua Error: %s", lua_tostring(L, -1));
-		wxMessageBox(message);
-
-		lua_pop(L, 1); // remove error message
-	}
-}
-
-
-
+	u8* data;
+	WiimoteEmu::ReportFeatures rptf;
+	int ext;
+	const wiimote_key key;
+};
 
 TASInputDlg::TASInputDlg(wxWindow* parent, wxWindowID id, const wxString& title,
-                         const wxPoint& position, const wxSize& size, long style)
-: wxDialog(parent, id, title, position, size, style)
+	const wxPoint& position, const wxSize& size, long style)
+	: wxDialog(parent, id, title, position, size, style)
 {
-
 }
 
 void TASInputDlg::CreateBaseLayout()
 {
-	for (unsigned int i = 0; i < 10; ++i)
+	for (unsigned int i = 0; i < ArraySize(m_controls); ++i)
 		m_controls[i] = nullptr;
-	for (unsigned int i = 0; i < 18; ++i) //Original: 17
+	for (unsigned int i = 0; i < ArraySize(m_buttons); ++i)
 		m_buttons[i] = nullptr;
+	for (unsigned int i = 0; i < ArraySize(m_cc_controls); ++i)
+		m_cc_controls[i] = nullptr;
 
 	m_buttons[0] = &m_dpad_down;
 	m_buttons[1] = &m_dpad_up;
@@ -448,33 +72,38 @@ void TASInputDlg::CreateBaseLayout()
 
 	m_buttons_dpad = new wxGridSizer(3);
 	m_buttons_dpad->AddSpacer(20);
-	m_buttons_dpad->Add(m_dpad_up.checkbox, false);
+	m_buttons_dpad->Add(m_dpad_up.checkbox);
 	m_buttons_dpad->AddSpacer(20);
-	m_buttons_dpad->Add(m_dpad_left.checkbox, false);
+	m_buttons_dpad->Add(m_dpad_left.checkbox);
 	m_buttons_dpad->AddSpacer(20);
-	m_buttons_dpad->Add(m_dpad_right.checkbox, false);
+	m_buttons_dpad->Add(m_dpad_right.checkbox);
 	m_buttons_dpad->AddSpacer(20);
-	m_buttons_dpad->Add(m_dpad_down.checkbox, false);
+	m_buttons_dpad->Add(m_dpad_down.checkbox);
 	m_buttons_dpad->AddSpacer(20);
-
-	Bind(wxEVT_CLOSE_WINDOW, &TASInputDlg::OnCloseWindow, this);
-	Bind(wxEVT_TEXT, &TASInputDlg::UpdateFromText, this);
-
-	//Required as Savestate operations need to be carried out on the GUI thread to prevent deadlocks
-	Bind(SAVESTATE_EVENT, &TASInputDlg::OnSaveState, this);
-	Bind(LOADSTATE_EVENT, &TASInputDlg::OnLoadState, this);
 }
 
 const int TASInputDlg::m_gc_pad_buttons_bitmask[12] = {
-	PAD_BUTTON_DOWN, PAD_BUTTON_UP, PAD_BUTTON_LEFT,PAD_BUTTON_RIGHT, PAD_BUTTON_A, PAD_BUTTON_B,
+	PAD_BUTTON_DOWN, PAD_BUTTON_UP, PAD_BUTTON_LEFT, PAD_BUTTON_RIGHT, PAD_BUTTON_A, PAD_BUTTON_B,
 	PAD_BUTTON_X, PAD_BUTTON_Y, PAD_TRIGGER_Z, PAD_TRIGGER_L, PAD_TRIGGER_R, PAD_BUTTON_START
 };
 
-const int TASInputDlg::m_wii_buttons_bitmask[13] = {
+const int TASInputDlg::m_wii_buttons_bitmask[11] = {
 	WiimoteEmu::Wiimote::PAD_DOWN, WiimoteEmu::Wiimote::PAD_UP, WiimoteEmu::Wiimote::PAD_LEFT,
 	WiimoteEmu::Wiimote::PAD_RIGHT, WiimoteEmu::Wiimote::BUTTON_A, WiimoteEmu::Wiimote::BUTTON_B,
 	WiimoteEmu::Wiimote::BUTTON_ONE, WiimoteEmu::Wiimote::BUTTON_TWO, WiimoteEmu::Wiimote::BUTTON_PLUS,
 	WiimoteEmu::Wiimote::BUTTON_MINUS, WiimoteEmu::Wiimote::BUTTON_HOME,
+};
+
+const int TASInputDlg::m_cc_buttons_bitmask[15] = {
+	WiimoteEmu::Classic::PAD_DOWN, WiimoteEmu::Classic::PAD_UP, WiimoteEmu::Classic::PAD_LEFT,
+	WiimoteEmu::Classic::PAD_RIGHT, WiimoteEmu::Classic::BUTTON_A, WiimoteEmu::Classic::BUTTON_B,
+	WiimoteEmu::Classic::BUTTON_X, WiimoteEmu::Classic::BUTTON_Y, WiimoteEmu::Classic::BUTTON_PLUS,
+	WiimoteEmu::Classic::BUTTON_MINUS, WiimoteEmu::Classic::TRIGGER_L, WiimoteEmu::Classic::TRIGGER_R,
+	WiimoteEmu::Classic::BUTTON_ZR, WiimoteEmu::Classic::BUTTON_ZL, WiimoteEmu::Classic::BUTTON_HOME,
+};
+
+const std::string TASInputDlg::m_cc_button_names[] = {
+	"Down", "Up", "Left", "Right", "A", "B", "X", "Y", "+", "-", "L", "R", "ZR", "ZL", "Home"
 };
 
 void TASInputDlg::CreateWiiLayout(int num)
@@ -514,6 +143,7 @@ void TASInputDlg::CreateWiiLayout(int num)
 	m_main_szr = new wxBoxSizer(wxVERTICAL);
 	m_wiimote_szr = new wxBoxSizer(wxHORIZONTAL);
 	m_ext_szr = new wxBoxSizer(wxHORIZONTAL);
+	m_cc_szr = CreateCCLayout();
 
 	if (Core::IsRunning())
 	{
@@ -524,11 +154,11 @@ void TASInputDlg::CreateWiiLayout(int num)
 		IniFile ini;
 		ini.Load(File::GetUserPath(D_CONFIG_IDX) + "WiimoteNew.ini");
 		std::string extension;
-		ini.GetIfExists("Wiimote" + std::to_string(num+1), "Extension", &extension);
+		ini.GetIfExists("Wiimote" + std::to_string(num + 1), "Extension", &extension);
 
 		if (extension == "Nunchuk")
 			m_ext = 1;
-		if (extension == "Classic Controller")
+		if (extension == "Classic")
 			m_ext = 2;
 	}
 
@@ -561,7 +191,7 @@ void TASInputDlg::CreateWiiLayout(int num)
 
 	for (unsigned int i = 4; i < 14; ++i)
 		if (m_buttons[i] != nullptr)
-			m_buttons_grid->Add(m_buttons[i]->checkbox, false);
+			m_buttons_grid->Add(m_buttons[i]->checkbox);
 	m_buttons_grid->AddSpacer(5);
 
 	m_buttons_box->Add(m_buttons_grid);
@@ -572,14 +202,106 @@ void TASInputDlg::CreateWiiLayout(int num)
 	m_wiimote_szr->Add(m_buttons_box, 0, wxTOP | wxRIGHT, 5);
 	m_main_szr->Add(m_wiimote_szr);
 	m_main_szr->Add(m_ext_szr);
-	if (m_ext == 1)
-		m_main_szr->Show(m_ext_szr);
-	else
-		m_main_szr->Hide(m_ext_szr);
-	SetSizerAndFit(m_main_szr, true);
+	m_main_szr->Add(m_cc_szr);
 
-	ResetValues();
+	HandleExtensionChange();
+	FinishLayout();
+}
+
+void TASInputDlg::FinishLayout()
+{
+	Bind(wxEVT_CLOSE_WINDOW, &TASInputDlg::OnCloseWindow, this);
+	Bind(INVALIDATE_BUTTON_EVENT, &TASInputDlg::UpdateFromInvalidatedButton, this);
+	Bind(INVALIDATE_CONTROL_EVENT, &TASInputDlg::UpdateFromInvalidatedControl, this);
 	m_has_layout = true;
+}
+
+wxBoxSizer* TASInputDlg::CreateCCLayout()
+{
+	wxBoxSizer* const szr = new wxBoxSizer(wxHORIZONTAL);
+
+	for (size_t i = 0; i < ArraySize(m_cc_buttons); ++i)
+		m_cc_buttons[i] = CreateButton(m_cc_button_names[i]);
+
+	m_cc_l_stick = CreateStick(ID_CC_L_STICK, 63, 63, WiimoteEmu::Classic::LEFT_STICK_CENTER_X, WiimoteEmu::Classic::LEFT_STICK_CENTER_Y, false, true);
+	m_cc_r_stick = CreateStick(ID_CC_R_STICK, 31, 31, WiimoteEmu::Classic::RIGHT_STICK_CENTER_X, WiimoteEmu::Classic::RIGHT_STICK_CENTER_Y, false, true);
+
+	m_cc_controls[CC_L_STICK_X] = &m_cc_l_stick.x_cont;
+	m_cc_controls[CC_L_STICK_Y] = &m_cc_l_stick.y_cont;
+	m_cc_controls[CC_R_STICK_X] = &m_cc_r_stick.x_cont;
+	m_cc_controls[CC_R_STICK_Y] = &m_cc_r_stick.y_cont;
+	m_cc_controls[CC_L_TRIGGER] = &m_cc_l;
+	m_cc_controls[CC_R_TRIGGER] = &m_cc_r;
+
+	m_cc_l_stick_szr = CreateStickLayout(&m_cc_l_stick, _("Left stick"));
+	m_cc_r_stick_szr = CreateStickLayout(&m_cc_r_stick, _("Right stick"));
+
+	m_cc_l = CreateControl(wxSL_VERTICAL, -1, 100, false, 31, 0);;
+	m_cc_r = CreateControl(wxSL_VERTICAL, -1, 100, false, 31, 0);;
+
+	wxStaticBoxSizer* const shoulder_box = new wxStaticBoxSizer(wxHORIZONTAL, this, _("Shoulder Buttons"));
+	shoulder_box->Add(m_cc_l.slider, 0, wxALIGN_CENTER_VERTICAL);
+	shoulder_box->Add(m_cc_l.text, 0, wxALIGN_CENTER_VERTICAL);
+	shoulder_box->Add(m_cc_r.slider, 0, wxALIGN_CENTER_VERTICAL);
+	shoulder_box->Add(m_cc_r.text, 0, wxALIGN_CENTER_VERTICAL);
+
+	wxStaticBoxSizer* const cc_buttons_box = new wxStaticBoxSizer(wxVERTICAL, this, _("Buttons"));
+	wxGridSizer* const cc_buttons_grid = new wxGridSizer(4);
+	wxGridSizer* const cc_buttons_dpad = new wxGridSizer(3);
+
+	cc_buttons_dpad->AddSpacer(20);
+	cc_buttons_dpad->Add(m_cc_buttons[1].checkbox);
+	cc_buttons_dpad->AddSpacer(20);
+	cc_buttons_dpad->Add(m_cc_buttons[2].checkbox);
+	cc_buttons_dpad->AddSpacer(20);
+	cc_buttons_dpad->Add(m_cc_buttons[3].checkbox);
+	cc_buttons_dpad->AddSpacer(20);
+	cc_buttons_dpad->Add(m_cc_buttons[0].checkbox);
+	cc_buttons_dpad->AddSpacer(20);
+
+
+	for (auto button : m_cc_buttons)
+		cc_buttons_grid->Add(button.checkbox);
+	cc_buttons_grid->AddSpacer(5);
+
+	cc_buttons_box->Add(cc_buttons_grid);
+	cc_buttons_box->Add(cc_buttons_dpad);
+
+	szr->Add(m_cc_l_stick_szr, 0, wxALL, 5);
+	szr->Add(m_cc_r_stick_szr, 0, wxALL, 5);
+	szr->Add(shoulder_box, 0, wxLEFT | wxRIGHT, 5);
+	szr->Add(cc_buttons_box, 0, wxTOP | wxRIGHT, 5);
+
+	for (Control* const control : m_cc_controls)
+	{
+		if (control != nullptr)
+			control->slider->Bind(wxEVT_RIGHT_UP, &TASInputDlg::OnRightClickSlider, this);
+	}
+	return szr;
+}
+
+void TASInputDlg::HandleExtensionChange()
+{
+	if (m_ext == 1)
+	{
+		m_main_szr->Hide(m_cc_szr);
+		m_main_szr->Show(m_wiimote_szr);
+		m_main_szr->Show(m_ext_szr);
+	}
+	else if (m_ext == 2)
+	{
+		m_main_szr->Hide(m_ext_szr);
+		m_main_szr->Hide(m_wiimote_szr);
+		m_main_szr->Show(m_cc_szr);
+	}
+	else
+	{
+		m_main_szr->Hide(m_ext_szr);
+		m_main_szr->Hide(m_cc_szr);
+		m_main_szr->Show(m_wiimote_szr);
+	}
+	SetSizerAndFit(m_main_szr, true);
+	ResetValues();
 }
 
 void TASInputDlg::CreateGCLayout()
@@ -601,7 +323,6 @@ void TASInputDlg::CreateGCLayout()
 	m_buttons[15] = &m_quickspin;
 	m_buttons[16] = &m_rollassist;
 	m_buttons[17] = &m_skipDialog;
-
 
 	m_controls[2] = &m_c_stick.x_cont;
 	m_controls[3] = &m_c_stick.y_cont;
@@ -640,15 +361,13 @@ void TASInputDlg::CreateGCLayout()
 	m_z = CreateButton("Z");
 	m_start = CreateButton("Start");
 
-	for (unsigned int i = 4; i < 14; ++i) //17
+	for (unsigned int i = 4; i < 14; ++i)
 		if (m_buttons[i] != nullptr)
 			m_buttons_grid->Add(m_buttons[i]->checkbox, false);
 	m_buttons_grid->AddSpacer(5);
 
 	m_buttons_box->Add(m_buttons_grid);
 	m_buttons_box->Add(m_buttons_dpad);
-
-
 
 	//Dragonbane: Special Box
 	wxStaticBoxSizer* const m_buttons_extra = new wxStaticBoxSizer(wxVERTICAL, this, _("Extras"));
@@ -679,12 +398,13 @@ void TASInputDlg::CreateGCLayout()
 	//Dragonbane
 	bottom_box->Add(m_buttons_extra, 0, wxLEFT | wxRIGHT | wxBOTTOM, 5);
 
+	
 	main_szr->Add(top_box);
 	main_szr->Add(bottom_box);
 	SetSizerAndFit(main_szr);
 
 	ResetValues();
-	m_has_layout = true;
+	FinishLayout();
 }
 
 
@@ -713,7 +433,7 @@ TASInputDlg::Stick TASInputDlg::CreateStick(int id_stick, int xRange, int yRange
 	tempStick.bitmap->Bind(wxEVT_LEFT_DOWN, &TASInputDlg::OnMouseDownL, this);
 	tempStick.bitmap->Bind(wxEVT_RIGHT_UP, &TASInputDlg::OnMouseUpR, this);
 	tempStick.x_cont = CreateControl(wxSL_HORIZONTAL | (reverseX ? wxSL_INVERSE : 0), 120, -1, reverseX, xRange, defaultX);
-	tempStick.y_cont = CreateControl(wxSL_VERTICAL | (reverseY ?  wxSL_INVERSE : 0), -1, 120, reverseY, yRange, defaultY);
+	tempStick.y_cont = CreateControl(wxSL_VERTICAL | (reverseY ? wxSL_INVERSE : 0), -1, 120, reverseY, yRange, defaultY);
 	return tempStick;
 }
 
@@ -770,7 +490,10 @@ void TASInputDlg::ResetValues()
 	for (Button* const button : m_buttons)
 	{
 		if (button != nullptr)
+		{
+			button->value = false;
 			button->checkbox->SetValue(false);
+		}
 	}
 
 	for (Control* const control : m_controls)
@@ -782,53 +505,61 @@ void TASInputDlg::ResetValues()
 			control->text->SetValue(std::to_string(control->default_value));
 		}
 	}
+	if (m_ext == 2)
+	{
+		for (Button& button : m_cc_buttons)
+		{
+			button.value = false;
+			button.checkbox->SetValue(false);
+		}
+
+		for (Control* control : m_cc_controls)
+		{
+			control->value = control->default_value;
+			control->slider->SetValue(control->default_value);
+			control->text->SetValue(std::to_string(control->default_value));
+		}
+	}
 }
 
-void TASInputDlg::SetStickValue(bool* ActivatedByKeyboard, int* AmountPressed, wxTextCtrl* Textbox, int CurrentValue, int center)
+void TASInputDlg::SetStickValue(Control* control, int CurrentValue, int center)
 {
 	if (CurrentValue != center)
 	{
-		*AmountPressed = CurrentValue;
-		*ActivatedByKeyboard = true;
-	}
-	else if (*ActivatedByKeyboard)
-	{
-		*AmountPressed = center;
-		*ActivatedByKeyboard = false;
-	}
-	else
-	{
-		return;
-	}
-
-	Textbox->ChangeValue(std::to_string(*AmountPressed));
-	wxCommandEvent* evt = new wxCommandEvent(wxEVT_TEXT, Textbox->GetId());
-	evt->SetEventObject(Textbox);
-	wxQueueEvent(this, evt);
-}
-
-void TASInputDlg::SetSliderValue(Control* control, int CurrentValue, int default_value)
-{
-	if (CurrentValue != default_value)
-	{
 		control->value = CurrentValue;
 		control->set_by_keyboard = true;
-		control->text->ChangeValue(std::to_string(CurrentValue));
 	}
 	else if (control->set_by_keyboard)
 	{
-		control->value = default_value;
+		control->value = center;
 		control->set_by_keyboard = false;
-		control->text->ChangeValue(std::to_string(default_value));
 	}
 	else
 	{
 		return;
 	}
 
-	wxCommandEvent* evt = new wxCommandEvent(wxEVT_TEXT, control->text_id);
-	evt->SetEventObject(control->text);
-	wxQueueEvent(this, evt);
+	InvalidateControl(control);
+}
+
+void TASInputDlg::SetSliderValue(Control* control, int CurrentValue)
+{
+	if (CurrentValue != (int)control->default_value)
+	{
+		control->value = CurrentValue;
+		control->set_by_keyboard = true;
+	}
+	else if (control->set_by_keyboard)
+	{
+		control->value = control->default_value;
+		control->set_by_keyboard = false;
+	}
+	else
+	{
+		return;
+	}
+
+	InvalidateControl(control);
 }
 
 void TASInputDlg::SetButtonValue(Button* button, bool CurrentState)
@@ -836,15 +567,19 @@ void TASInputDlg::SetButtonValue(Button* button, bool CurrentState)
 	if (CurrentState)
 	{
 		button->set_by_keyboard = true;
-		button->checkbox->SetValue(CurrentState);
 	}
 	else if (button->set_by_keyboard)
 	{
 		button->set_by_keyboard = false;
-		button->checkbox->SetValue(CurrentState);
 	}
-}
+	else
+	{
+		return;
+	}
 
+	button->value = CurrentState;
+	InvalidateButton(button);
+}
 
 void TASInputDlg::SetWiiButtons(u16* butt)
 {
@@ -858,13 +593,13 @@ void TASInputDlg::SetWiiButtons(u16* butt)
 
 void TASInputDlg::GetKeyBoardInput(GCPadStatus* PadStatus)
 {
-	SetStickValue(&m_main_stick.x_cont.set_by_keyboard, &m_main_stick.x_cont.value, m_main_stick.x_cont.text, PadStatus->stickX);
-	SetStickValue(&m_main_stick.y_cont.set_by_keyboard, &m_main_stick.y_cont.value, m_main_stick.y_cont.text, PadStatus->stickY);
+	SetStickValue(&m_main_stick.x_cont, PadStatus->stickX);
+	SetStickValue(&m_main_stick.y_cont, PadStatus->stickY);
 
-	SetStickValue(&m_c_stick.x_cont.set_by_keyboard, &m_c_stick.x_cont.value, m_c_stick.x_cont.text, PadStatus->substickX);
-	SetStickValue(&m_c_stick.y_cont.set_by_keyboard, &m_c_stick.y_cont.value, m_c_stick.y_cont.text, PadStatus->substickY);
-	SetSliderValue(&m_l_cont, PadStatus->triggerLeft, 0);
-	SetSliderValue(&m_r_cont, PadStatus->triggerRight, 0);
+	SetStickValue(&m_c_stick.x_cont, PadStatus->substickX);
+	SetStickValue(&m_c_stick.y_cont, PadStatus->substickY);
+	SetSliderValue(&m_l_cont, PadStatus->triggerLeft);
+	SetSliderValue(&m_r_cont, PadStatus->triggerRight);
 
 	for (unsigned int i = 0; i < 14; ++i)
 	{
@@ -894,9 +629,9 @@ void TASInputDlg::GetKeyBoardInput(u8* data, WiimoteEmu::ReportFeatures rptf, in
 	{
 		wm_accel* dt = (wm_accel*)accelData;
 
-		SetSliderValue(&m_x_cont, dt->x << 2 | ((wm_buttons*)coreData)->acc_x_lsb, m_x_cont.default_value);
-		SetSliderValue(&m_y_cont, dt->y << 2 | ((wm_buttons*)coreData)->acc_y_lsb << 1, m_y_cont.default_value);
-		SetSliderValue(&m_z_cont, dt->z << 2 | ((wm_buttons*)coreData)->acc_z_lsb << 1, m_z_cont.default_value);
+		SetSliderValue(&m_x_cont, dt->x << 2 | ((wm_buttons*)coreData)->acc_x_lsb);
+		SetSliderValue(&m_y_cont, dt->y << 2 | ((wm_buttons*)coreData)->acc_y_lsb << 1);
+		SetSliderValue(&m_z_cont, dt->z << 2 | ((wm_buttons*)coreData)->acc_z_lsb << 1);
 	}
 
 	// I don't think this can be made to work in a sane manner.
@@ -917,6 +652,34 @@ void TASInputDlg::GetKeyBoardInput(u8* data, WiimoteEmu::ReportFeatures rptf, in
 		SetButtonValue(m_buttons[11], nunchuk.bt.c != 0);
 		SetButtonValue(m_buttons[12], nunchuk.bt.z != 0);
 	}
+
+	if (extData && ext == 2)
+	{
+		wm_classic_extension& cc = *(wm_classic_extension*)extData;
+		WiimoteDecrypt(&key, (u8*)&cc, 0, sizeof(wm_classic_extension));
+		cc.bt.hex = cc.bt.hex ^ 0xFFFF;
+		for (unsigned int i = 0; i < 15; ++i)
+		{
+			SetButtonValue(&m_cc_buttons[i], ((cc.bt.hex & m_cc_buttons_bitmask[i]) != 0));
+		}
+
+		if (m_cc_l.value == 31)
+		{
+			m_cc_buttons[10].value = true;
+			InvalidateButton(&m_cc_buttons[10]);
+		}
+		if (m_cc_r.value == 31)
+		{
+			m_cc_buttons[11].value = true;
+			InvalidateButton(&m_cc_buttons[11]);
+		}
+
+		SetSliderValue(&m_cc_l_stick.x_cont, cc.regular_data.lx);
+		SetSliderValue(&m_cc_l_stick.y_cont, cc.regular_data.ly);
+
+		SetSliderValue(&m_cc_r_stick.x_cont, cc.rx1 | (cc.rx2 << 1) | (cc.rx3 << 3));
+		SetSliderValue(&m_cc_r_stick.y_cont, cc.ry);
+	}
 }
 
 void TASInputDlg::GetValues(u8* data, WiimoteEmu::ReportFeatures rptf, int ext, const wiimote_key key)
@@ -930,78 +693,80 @@ void TASInputDlg::GetValues(u8* data, WiimoteEmu::ReportFeatures rptf, int ext, 
 	u8* const accelData = rptf.accel ? (data + rptf.accel) : nullptr;
 	u8* const irData = rptf.ir ? (data + rptf.ir) : nullptr;
 	u8* const extData = rptf.ext ? (data + rptf.ext) : nullptr;
-
-	if (coreData)
-		SetWiiButtons(&((wm_buttons*)coreData)->hex);
-
-	if (accelData)
+	if (ext != 2)
 	{
-		wm_accel& dt = *(wm_accel*)accelData;
-		wm_buttons& but = *(wm_buttons*)coreData;
-		dt.x = m_x_cont.value >> 2;
-		dt.y = m_y_cont.value >> 2;
-		dt.z = m_z_cont.value >> 2;
-		but.acc_x_lsb = m_x_cont.value & 0x3;
-		but.acc_y_lsb = m_y_cont.value >> 1 & 0x1;
-		but.acc_z_lsb = m_z_cont.value >> 1 & 0x1;
-	}
-	if (irData)
-	{
-		u16 x[4];
-		u16 y;
+		if (coreData)
+			SetWiiButtons(&((wm_buttons*)coreData)->hex);
 
-		x[0] = m_main_stick.x_cont.value;
-		y = m_main_stick.y_cont.value;
-		x[1] = x[0] + 100;
-		x[2] = x[0] - 10;
-		x[3] = x[1] + 10;
-
-		u8 mode;
-		// Mode 5 not supported in core anyway.
-		if (rptf.ext)
-			mode = (rptf.ext - rptf.ir) == 10 ? 1 : 3;
-		else
-			mode = (rptf.size - rptf.ir) == 10 ? 1 : 3;
-
-		if (mode == 1)
+		if (accelData)
 		{
-			memset(irData, 0xFF, sizeof(wm_ir_basic) * 2);
-			wm_ir_basic* ir_data = (wm_ir_basic*)irData;
-			for (unsigned int i = 0; i < 2; ++i)
+			wm_accel& dt = *(wm_accel*)accelData;
+			wm_buttons& but = *(wm_buttons*)coreData;
+			dt.x = m_x_cont.value >> 2;
+			dt.y = m_y_cont.value >> 2;
+			dt.z = m_z_cont.value >> 2;
+			but.acc_x_lsb = m_x_cont.value & 0x3;
+			but.acc_y_lsb = m_y_cont.value >> 1 & 0x1;
+			but.acc_z_lsb = m_z_cont.value >> 1 & 0x1;
+		}
+		if (irData)
+		{
+			u16 x[4];
+			u16 y;
+
+			x[0] = m_main_stick.x_cont.value;
+			y = m_main_stick.y_cont.value;
+			x[1] = x[0] + 100;
+			x[2] = x[0] - 10;
+			x[3] = x[1] + 10;
+
+			u8 mode;
+			// Mode 5 not supported in core anyway.
+			if (rptf.ext)
+				mode = (rptf.ext - rptf.ir) == 10 ? 1 : 3;
+			else
+				mode = (rptf.size - rptf.ir) == 10 ? 1 : 3;
+
+			if (mode == 1)
 			{
-				if (x[i*2] < 1024 && y < 768)
+				memset(irData, 0xFF, sizeof(wm_ir_basic) * 2);
+				wm_ir_basic* ir_data = (wm_ir_basic*)irData;
+				for (unsigned int i = 0; i < 2; ++i)
 				{
-					ir_data[i].x1 = static_cast<u8>(x[i*2]);
-					ir_data[i].x1hi = x[i*2] >> 8;
+					if (x[i * 2] < 1024 && y < 768)
+					{
+						ir_data[i].x1 = static_cast<u8>(x[i * 2]);
+						ir_data[i].x1hi = x[i * 2] >> 8;
 
-					ir_data[i].y1 = static_cast<u8>(y);
-					ir_data[i].y1hi = y >> 8;
-				}
-				if (x[i*2+1] < 1024 && y < 768)
-				{
-					ir_data[i].x2 = static_cast<u8>(x[i*2+1]);
-					ir_data[i].x2hi = x[i*2+1] >> 8;
+						ir_data[i].y1 = static_cast<u8>(y);
+						ir_data[i].y1hi = y >> 8;
+					}
+					if (x[i * 2 + 1] < 1024 && y < 768)
+					{
+						ir_data[i].x2 = static_cast<u8>(x[i * 2 + 1]);
+						ir_data[i].x2hi = x[i * 2 + 1] >> 8;
 
-					ir_data[i].y2 = static_cast<u8>(y);
-					ir_data[i].y2hi = y >> 8;
+						ir_data[i].y2 = static_cast<u8>(y);
+						ir_data[i].y2hi = y >> 8;
+					}
 				}
 			}
-		}
-		else
-		{
-			memset(data, 0xFF, sizeof(wm_ir_extended) * 4);
-			wm_ir_extended* const ir_data = (wm_ir_extended*)irData;
-			for (unsigned int i = 0; i < 4; ++i)
+			else
 			{
-				if (x[i] < 1024 && y < 768)
+				memset(data, 0xFF, sizeof(wm_ir_extended) * 4);
+				wm_ir_extended* const ir_data = (wm_ir_extended*)irData;
+				for (unsigned int i = 0; i < 4; ++i)
 				{
-					ir_data[i].x = static_cast<u8>(x[i]);
-					ir_data[i].xhi = x[i] >> 8;
+					if (x[i] < 1024 && y < 768)
+					{
+						ir_data[i].x = static_cast<u8>(x[i]);
+						ir_data[i].xhi = x[i] >> 8;
 
-					ir_data[i].y = static_cast<u8>(y);
-					ir_data[i].yhi = y >> 8;
+						ir_data[i].y = static_cast<u8>(y);
+						ir_data[i].yhi = y >> 8;
 
-					ir_data[i].size = 10;
+						ir_data[i].size = 10;
+					}
 				}
 			}
 		}
@@ -1009,15 +774,7 @@ void TASInputDlg::GetValues(u8* data, WiimoteEmu::ReportFeatures rptf, int ext, 
 	if (ext != m_ext)
 	{
 		m_ext = ext;
-		if (ext == 0)
-		{
-			m_main_szr->Hide(m_ext_szr);
-		}
-		else
-		{
-			m_main_szr->Show(m_ext_szr);
-		}
-		SetSizerAndFit(m_main_szr);
+		HandleExtensionChange();
 	}
 	else if (extData && ext == 1)
 	{
@@ -1026,11 +783,11 @@ void TASInputDlg::GetValues(u8* data, WiimoteEmu::ReportFeatures rptf, int ext, 
 		nunchuk.jx = m_c_stick.x_cont.value;
 		nunchuk.jy = m_c_stick.y_cont.value;
 
-		nunchuk.ax    = m_nx_cont.value >> 2;
+		nunchuk.ax = m_nx_cont.value >> 2;
 		nunchuk.bt.acc_x_lsb = m_nx_cont.value & 0x3;
-		nunchuk.ay    = m_ny_cont.value >> 2;
+		nunchuk.ay = m_ny_cont.value >> 2;
 		nunchuk.bt.acc_y_lsb = m_ny_cont.value & 0x3;
-		nunchuk.az    = m_nz_cont.value >> 2;
+		nunchuk.az = m_nz_cont.value >> 2;
 		nunchuk.bt.acc_z_lsb = m_nz_cont.value & 0x3;
 
 		nunchuk.bt.hex |= (m_buttons[11]->checkbox->IsChecked()) ? WiimoteEmu::Nunchuk::BUTTON_C : 0;
@@ -1038,27 +795,45 @@ void TASInputDlg::GetValues(u8* data, WiimoteEmu::ReportFeatures rptf, int ext, 
 		nunchuk.bt.hex = nunchuk.bt.hex ^ 0x3;
 		WiimoteEncrypt(&key, (u8*)&nunchuk, 0, sizeof(wm_nc));
 	}
-	//else if (extData && ext == 2)
-	//{
-		// TODO
-		//wm_classic_extension& cc = *(wm_classic_extension*)extData;
-		//WiimoteDecrypt(&key, (u8*)&cc, 0, sizeof(wm_classic_extension));
+	else if (extData && ext == 2)
+	{
+		wm_classic_extension& cc = *(wm_classic_extension*)extData;
+		WiimoteDecrypt(&key, (u8*)&cc, 0, sizeof(wm_classic_extension));
+		cc.bt.hex = 0;
 
-		//WiimoteEncrypt(&key, (u8*)&cc, 0, sizeof(wm_classic_extension));
-	//}
+		for (unsigned int i = 0; i < ArraySize(m_cc_buttons); ++i)
+		{
+			cc.bt.hex |= (m_cc_buttons[i].checkbox->IsChecked()) ? m_cc_buttons_bitmask[i] : 0;
+		}
+		cc.bt.hex ^= 0xFFFF;
+
+		u16 rx = m_cc_r_stick.x_cont.value;
+		cc.rx1 = rx & 0x1;
+		cc.rx2 = (rx >> 1) & 0x3;
+		cc.rx3 = (rx >> 3) & 0x3;
+		cc.ry = m_cc_r_stick.y_cont.value;
+
+		cc.regular_data.lx = m_cc_l_stick.x_cont.value;
+		cc.regular_data.ly = m_cc_l_stick.y_cont.value;
+
+		cc.rt = m_cc_r.value;
+		cc.lt1 = m_cc_l.value & 0x7;
+		cc.lt2 = (m_cc_l.value >> 3) & 0x3;
+
+		WiimoteEncrypt(&key, (u8*)&cc, 0, sizeof(wm_classic_extension));
+	}
 }
 
 void TASInputDlg::GetValues(GCPadStatus* PadStatus)
 {
-	if (!IsShown())
+	if (!IsShown() || !m_has_layout)
 		return;
 
 	//TODO:: Make this instant not when polled.
 	GetKeyBoardInput(PadStatus);
 
-	//Dragonbane: Execute custom scripts
-	ExecuteScripts();
-
+	//Dragonbane: Execute custom Button functions
+	ExecuteHelpers();
 
 	PadStatus->stickX = m_main_stick.x_cont.value;
 	PadStatus->stickY = m_main_stick.y_cont.value;
@@ -1101,7 +876,12 @@ void TASInputDlg::UpdateFromSliders(wxCommandEvent& event)
 			text = control->text;
 	}
 
-	int value = ((wxSlider*) event.GetEventObject())->GetValue();
+	for (Control* const control : m_cc_controls)
+	{
+		if (control != nullptr && event.GetId() == control->slider_id)
+			text = control->text;
+	}
+	int value = ((wxSlider*)event.GetEventObject())->GetValue();
 	if (text)
 		text->SetValue(std::to_string(value));
 }
@@ -1110,7 +890,7 @@ void TASInputDlg::UpdateFromText(wxCommandEvent& event)
 {
 	unsigned long value;
 
-	if (!((wxTextCtrl*) event.GetEventObject())->GetValue().ToULong(&value))
+	if (!((wxTextCtrl*)event.GetEventObject())->GetValue().ToULong(&value))
 		return;
 
 	for (Control* const control : m_controls)
@@ -1124,26 +904,36 @@ void TASInputDlg::UpdateFromText(wxCommandEvent& event)
 		}
 	}
 
-	if (m_controls[2] != nullptr)
+	for (Control* const control : m_cc_controls)
 	{
-		int x = m_c_stick.x_cont.value;
-		int y = m_c_stick.y_cont.value;
-
-		if (m_c_stick.x_cont.reverse)
-			x = m_c_stick.x_cont.range - m_c_stick.x_cont.value + 1;
-		if (m_c_stick.y_cont.reverse)
-			y = m_c_stick.y_cont.range - m_c_stick.y_cont.value + 1;
-
-		m_c_stick.bitmap->SetBitmap(CreateStickBitmap(x, y));
+		if (control != nullptr && event.GetId() == control->text_id)
+		{
+			int v = (value > control->range) ? control->range : value;
+			control->slider->SetValue(v);
+			control->text->ChangeValue(std::to_string(v));
+			control->value = v;
+		}
 	}
 
-	int x = (u8)(std::floor(((double)m_main_stick.x_cont.value / (double)m_main_stick.x_cont.range * 255.0) + .5));
-	int y = (u8)(std::floor(((double)m_main_stick.y_cont.value / (double)m_main_stick.y_cont.range * 255.0) + .5));
-	if (m_main_stick.x_cont.reverse)
+	if (m_controls[0] != nullptr)
+		UpdateStickBitmap(m_main_stick);
+	if (m_controls[2] != nullptr)
+		UpdateStickBitmap(m_c_stick);
+	if (m_cc_controls[CC_L_STICK_X] != nullptr)
+		UpdateStickBitmap(m_cc_l_stick);
+	if (m_cc_controls[CC_R_STICK_X] != nullptr)
+		UpdateStickBitmap(m_cc_r_stick);
+}
+
+void TASInputDlg::UpdateStickBitmap(Stick stick)
+{
+	int x = (u8)(std::floor(((double)stick.x_cont.value / (double)(stick.x_cont.range + 1) * 255.0) + .5));
+	int y = (u8)(std::floor(((double)stick.y_cont.value / (double)(stick.y_cont.range + 1) * 255.0) + .5));
+	if (stick.x_cont.reverse)
 		x = 256 - (u8)x;
-	if (m_main_stick.y_cont.reverse)
+	if (stick.y_cont.reverse)
 		y = 256 - (u8)y;
-	m_main_stick.bitmap->SetBitmap(CreateStickBitmap(x, y));
+	stick.bitmap->SetBitmap(CreateStickBitmap(x, y));
 }
 
 void TASInputDlg::OnCloseWindow(wxCloseEvent& event)
@@ -1160,6 +950,7 @@ bool TASInputDlg::TASHasFocus()
 {
 	if (!m_has_layout)
 		return false;
+
 	//allows numbers to be used as hotkeys
 	for (Control* const control : m_controls)
 	{
@@ -1175,20 +966,28 @@ bool TASInputDlg::TASHasFocus()
 		return false;
 }
 
+TASInputDlg::Stick* TASInputDlg::FindStickByID(int id)
+{
+	if (id == ID_MAIN_STICK)
+		return &m_main_stick;
+	else if (id == ID_C_STICK)
+		return &m_c_stick;
+	else if (id == ID_CC_L_STICK)
+		return &m_cc_l_stick;
+	else if (id == ID_CC_R_STICK)
+		return &m_cc_r_stick;
+	else
+		return nullptr;
+}
 void TASInputDlg::OnMouseUpR(wxMouseEvent& event)
 {
-	Stick* stick = nullptr;
-	if (event.GetId() == ID_MAIN_STICK)
-		stick = &m_main_stick;
-	else if (event.GetId() == ID_C_STICK)
-		stick = &m_c_stick;
-
+	Stick* stick = FindStickByID(event.GetId());
 	if (stick == nullptr)
 		return;
 
 	stick->x_cont.value = stick->x_cont.default_value;
 	stick->y_cont.value = stick->y_cont.default_value;
-	stick->bitmap->SetBitmap(CreateStickBitmap(128,128));
+	stick->bitmap->SetBitmap(CreateStickBitmap(128, 128));
 	stick->x_cont.text->SetValue(std::to_string(stick->x_cont.default_value));
 	stick->y_cont.text->SetValue(std::to_string(stick->y_cont.default_value));
 	stick->x_cont.slider->SetValue(stick->x_cont.default_value);
@@ -1206,6 +1005,17 @@ void TASInputDlg::OnRightClickSlider(wxMouseEvent& event)
 			control->value = control->default_value;
 			control->slider->SetValue(control->default_value);
 			control->text->SetValue(std::to_string(control->default_value));
+			return;
+		}
+	}
+	for (Control* const control : m_cc_controls)
+	{
+		if (control != nullptr && event.GetId() == control->slider_id)
+		{
+			control->value = control->default_value;
+			control->slider->SetValue(control->default_value);
+			control->text->SetValue(std::to_string(control->default_value));
+			return;
 		}
 	}
 }
@@ -1215,12 +1025,8 @@ void TASInputDlg::OnMouseDownL(wxMouseEvent& event)
 	if (!event.LeftIsDown())
 		return;
 
-	Stick* stick;
-	if (event.GetId() == ID_MAIN_STICK)
-		stick = &m_main_stick;
-	else if (event.GetId() == ID_C_STICK)
-		stick = &m_c_stick;
-	else
+	Stick* stick = FindStickByID(event.GetId());
+	if (stick == nullptr)
 		return;
 
 	wxPoint ptM(event.GetPosition());
@@ -1240,13 +1046,10 @@ void TASInputDlg::OnMouseDownL(wxMouseEvent& event)
 	stick->x_cont.value = (unsigned int)stick->x_cont.value > stick->x_cont.range ? stick->x_cont.range : stick->x_cont.value;
 	stick->y_cont.value = (unsigned int)stick->y_cont.value > stick->y_cont.range ? stick->y_cont.range : stick->y_cont.value;
 
-	stick->bitmap->SetBitmap(CreateStickBitmap(ptM.x*2, ptM.y*2));
-
+	// This updates sliders and the bitmap too.
 	stick->x_cont.text->SetValue(std::to_string(stick->x_cont.value));
 	stick->y_cont.text->SetValue(std::to_string(stick->y_cont.value));
 
-	stick->x_cont.slider->SetValue(stick->x_cont.value);
-	stick->y_cont.slider->SetValue(stick->y_cont.value);
 	event.Skip();
 }
 
@@ -1258,6 +1061,14 @@ void TASInputDlg::SetTurbo(wxMouseEvent& event)
 	{
 		if (btn != nullptr && event.GetId() == btn->id)
 			button = btn;
+	}
+	if (m_ext == 2)
+	{
+		for (size_t i = 0; i < ArraySize(m_cc_buttons); ++i)
+		{
+			if (event.GetId() == m_cc_buttons[i].id)
+				button = &m_cc_buttons[i];
+		}
 	}
 
 	if (event.LeftDown())
@@ -1288,9 +1099,63 @@ void TASInputDlg::ButtonTurbo()
 		for (Button* const button : m_buttons)
 		{
 			if (button != nullptr && button->turbo_on)
-				button->checkbox->SetValue(!button->checkbox->GetValue());
+			{
+				button->value = !button->checkbox->GetValue();
+				InvalidateButton(button);
+			}
+		}
+		if (m_ext == 2)
+		{
+			for (Button& button : m_cc_buttons)
+			{
+				if (button.turbo_on)
+				{
+					button.value = !button.checkbox->GetValue();
+					InvalidateButton(&button);
+				}
+			}
 		}
 	}
+}
+
+void TASInputDlg::InvalidateButton(Button* button)
+{
+	if (!wxIsMainThread())
+	{
+		wxCommandEvent* evt = new wxCommandEvent(INVALIDATE_BUTTON_EVENT, button->id);
+		evt->SetClientData(button);
+		wxQueueEvent(this, evt);
+		return;
+	}
+
+	button->checkbox->SetValue(button->value);
+}
+
+void TASInputDlg::InvalidateControl(Control* control)
+{
+	if (!wxIsMainThread())
+	{
+		wxCommandEvent* evt = new wxCommandEvent(INVALIDATE_CONTROL_EVENT, control->text_id);
+		evt->SetClientData(control);
+		wxQueueEvent(this, evt);
+		return;
+	}
+
+	control->text->SetValue(std::to_string(control->value));
+}
+
+void TASInputDlg::UpdateFromInvalidatedButton(wxCommandEvent& event)
+{
+	Button* button = static_cast<Button*>(event.GetClientData());
+	_assert_msg_(PAD, button->id == button->checkbox->GetId(), "Button ids do not match: %i != %i", button->id, button->checkbox->GetId());
+	button->checkbox->SetValue(button->value);
+}
+
+void TASInputDlg::UpdateFromInvalidatedControl(wxCommandEvent& event)
+{
+	Control* control = static_cast<Control*>(event.GetClientData());
+	_assert_msg_(PAD, control->text_id == control->text->GetId(), "Control ids do not match: %i != %i", control->text_id, control->text->GetId());
+	control->text->SetValue(std::to_string(control->value));
 }
 
 wxBitmap TASInputDlg::CreateStickBitmap(int x, int y)
@@ -1308,7 +1173,7 @@ wxBitmap TASInputDlg::CreateStickBitmap(int x, int y)
 	memDC.SetBrush(*wxRED_BRUSH);
 	memDC.DrawLine(64, 64, x, y);
 	memDC.DrawLine(63, 64, x - 1, y);
-	memDC.DrawLine(65, 64, x + 1 , y);
+	memDC.DrawLine(65, 64, x + 1, y);
 	memDC.DrawLine(64, 63, x, y - 1);
 	memDC.DrawLine(64, 65, x, y + 1);
 	memDC.SetPen(*wxBLACK_PEN);
@@ -1318,6 +1183,7 @@ wxBitmap TASInputDlg::CreateStickBitmap(int x, int y)
 	memDC.SelectObject(wxNullBitmap);
 	return bitmap;
 }
+
 
 //Dragonbane
 void TASInputDlg::UpdateExtraButtons(bool check, bool uncheck)
@@ -1359,161 +1225,9 @@ void TASInputDlg::UpdateFromButtons(wxCommandEvent& event)
 	Movie::uncheckSave = false;
 }
 
-
-//Dragonbane: Lua Wrapper Functions
-void TASInputDlg::iPressButton(const char* button)
+void TASInputDlg::ExecuteHelpers()
 {
-	if (!strcmp(button, "A"))
-		m_a.checkbox->SetValue(true);
-	else if (!strcmp(button, "B"))
-		m_b.checkbox->SetValue(true);
-	else if (!strcmp(button, "X"))
-		m_x.checkbox->SetValue(true);
-	else if (!strcmp(button, "Y"))
-		m_y.checkbox->SetValue(true);
-	else if (!strcmp(button, "Z"))
-		m_z.checkbox->SetValue(true);
-	else if (!strcmp(button, "L"))
-		m_l.checkbox->SetValue(true);
-	else if (!strcmp(button, "R"))
-		m_r.checkbox->SetValue(true);
-	else if (!strcmp(button, "Start"))
-		m_start.checkbox->SetValue(true);
-	else if (!strcmp(button, "D-Up"))
-		m_dpad_up.checkbox->SetValue(true);
-	else if (!strcmp(button, "D-Down"))
-		m_dpad_down.checkbox->SetValue(true);
-	else if (!strcmp(button, "D-Left"))
-		m_dpad_left.checkbox->SetValue(true);
-	else if (!strcmp(button, "D-Right"))
-		m_dpad_right.checkbox->SetValue(true);
-}
-void TASInputDlg::iReleaseButton(const char* button)
-{
-	if (!strcmp(button, "A"))
-		m_a.checkbox->SetValue(false);
-	else if (!strcmp(button, "B"))
-		m_b.checkbox->SetValue(false);
-	else if (!strcmp(button, "X"))
-		m_x.checkbox->SetValue(false);
-	else if (!strcmp(button, "Y"))
-		m_y.checkbox->SetValue(false);
-	else if (!strcmp(button, "Z"))
-		m_z.checkbox->SetValue(false);
-	else if (!strcmp(button, "L"))
-		m_l.checkbox->SetValue(false);
-	else if (!strcmp(button, "R"))
-		m_r.checkbox->SetValue(false);
-	else if (!strcmp(button, "Start"))
-		m_start.checkbox->SetValue(false);
-	else if (!strcmp(button, "D-Up"))
-		m_dpad_up.checkbox->SetValue(false);
-	else if (!strcmp(button, "D-Down"))
-		m_dpad_down.checkbox->SetValue(false);
-	else if (!strcmp(button, "D-Left"))
-		m_dpad_left.checkbox->SetValue(false);
-	else if (!strcmp(button, "D-Right"))
-		m_dpad_right.checkbox->SetValue(false);
-}
-
-void TASInputDlg::iSetMainStickX(int xVal)
-{
-	m_main_stick.x_cont.value = xVal;
-	//SetStickValue(&m_main_stick.x_cont.set_by_keyboard, &m_main_stick.x_cont.value, m_main_stick.x_cont.text, xVal);
-}
-void TASInputDlg::iSetMainStickY(int yVal)
-{
-	m_main_stick.y_cont.value = yVal;
-	//SetStickValue(&m_main_stick.y_cont.set_by_keyboard, &m_main_stick.y_cont.value, m_main_stick.y_cont.text, yVal);
-}
-void TASInputDlg::iSetCStickX(int xVal)
-{
-	m_c_stick.x_cont.value = xVal;
-	//SetStickValue(&m_c_stick.x_cont.set_by_keyboard, &m_c_stick.x_cont.value, m_c_stick.x_cont.text, xVal);
-}
-void TASInputDlg::iSetCStickY(int yVal)
-{
-	m_c_stick.y_cont.value = yVal;
-	//SetStickValue(&m_c_stick.y_cont.set_by_keyboard, &m_c_stick.y_cont.value, m_c_stick.y_cont.text, yVal);
-}
-void TASInputDlg::iSaveState(bool toSlot, int slotID, std::string fileName)
-{
-	Movie::lua_isStateOperation = true;
-	Movie::lua_isStateSaved = false;
-	Movie::lua_isStateLoaded = false;
-
-	if (wxIsMainThread())
-	{
-		if (toSlot)
-			State::Save(slotID);
-		else
-			State::SaveAs(File::GetUserPath(D_STATESAVES_IDX) + fileName);
-	}
-	else
-	{
-		m_stateData.useSlot = toSlot;
-		m_stateData.slotID = slotID;
-		m_stateData.fileName = fileName;
-
-		wxCommandEvent* evt = new wxCommandEvent(SAVESTATE_EVENT);
-		evt->SetClientData(&m_stateData);
-		wxQueueEvent(this, evt);
-	}
-}
-void TASInputDlg::iLoadState(bool fromSlot, int slotID, std::string fileName)
-{
-	Movie::lua_isStateOperation = true;
-	Movie::lua_isStateSaved = false;
-	Movie::lua_isStateLoaded = false;
-
-	if (wxIsMainThread())
-	{
-		if (fromSlot)
-			State::Load(slotID);
-		else
-			State::LoadAs(File::GetUserPath(D_STATESAVES_IDX) + fileName);
-	}
-	else
-	{
-		m_stateData.useSlot = fromSlot;
-		m_stateData.slotID = slotID;
-		m_stateData.fileName = fileName;
-
-		wxCommandEvent* evt = new wxCommandEvent(LOADSTATE_EVENT);
-		evt->SetClientData(&m_stateData);
-		wxQueueEvent(this, evt);
-	}
-}
-
-bool TASInputDlg::iIsGUIThread()
-{
-	return (wxIsMainThread());
-}
-
-void TASInputDlg::OnSaveState(wxCommandEvent& event)
-{
-	StateEvent* info = static_cast<StateEvent*>(event.GetClientData());
-
-	if (info->useSlot)
-		State::Save(info->slotID);
-	else
-		State::SaveAs(File::GetUserPath(D_STATESAVES_IDX) + info->fileName);
-}
-
-void TASInputDlg::OnLoadState(wxCommandEvent& event)
-{
-	StateEvent* info = static_cast<StateEvent*>(event.GetClientData());
-
-	if (info->useSlot)
-		State::Load(info->slotID);
-	else
-		State::LoadAs(File::GetUserPath(D_STATESAVES_IDX) + info->fileName);
-}
-
-
-//Dragonbane: Custom Scripts
-void TASInputDlg::ExecuteScripts()
-{
+	//Dragonbane: Custom Button functions
 	if (!Core::IsRunningAndStarted())
 		return;
 
@@ -1761,162 +1475,4 @@ void TASInputDlg::ExecuteScripts()
 			}
 		}
 	}
-
-	//Superswim Script
-	if (Movie::swimStarted && !Movie::swimInProgress) //Start Superswim
-	{
-		//Dragonbane: Give instance of class
-		luaInstance = this;
-
-		luaState = luaL_newstate();
-
-		luaL_openlibs(luaState);
-
-		//Reset vars
-		Movie::lua_isStateOperation = false;
-		Movie::lua_isStateSaved = false;
-		Movie::lua_isStateLoaded = false;
-
-		//Make functions available to Lua programs
-		lua_register(luaState, "ReadValue8", ReadValue8);
-		lua_register(luaState, "ReadValue16", ReadValue16);
-		lua_register(luaState, "ReadValue32", ReadValue32);
-		lua_register(luaState, "ReadValueFloat", ReadValueFloat);
-		lua_register(luaState, "ReadValueString", ReadValueString);
-		lua_register(luaState, "GetPointerNormal", GetPointerNormal);
-
-		lua_register(luaState, "WriteValue8", WriteValue8);
-		lua_register(luaState, "WriteValue16", WriteValue16);
-		lua_register(luaState, "WriteValue32", WriteValue32);
-		lua_register(luaState, "WriteValueFloat", WriteValueFloat);
-		lua_register(luaState, "WriteValueString", WriteValueString);
-
-		lua_register(luaState, "PressButton", PressButton);
-		lua_register(luaState, "ReleaseButton", ReleaseButton);
-		lua_register(luaState, "SetMainStickX", SetMainStickX);
-		lua_register(luaState, "SetMainStickY", SetMainStickY);
-		lua_register(luaState, "SetCStickX", SetCStickX);
-		lua_register(luaState, "SetCStickY", SetCStickY);
-
-		lua_register(luaState, "SaveState", SaveState);
-		lua_register(luaState, "LoadState", LoadState);
-
-		lua_register(luaState, "GetFrameCount", GetFrameCount);
-		lua_register(luaState, "IsGUIThread", IsGUIThread);
-		lua_register(luaState, "MsgBox", MsgBox);
-		lua_register(luaState, "AbortSwim", AbortSwim);
-
-		std::string file = File::GetExeDirectory() + "\\Scripts\\Superswim.lua";
-
-		int status = luaL_dofile(luaState, file.c_str());
-
-		if (status == 0)
-		{
-			//Execute Start function
-			lua_getglobal(luaState, "startSwim");
-
-			lua_pushnumber(luaState, Movie::swimDestPosX);
-			lua_pushnumber(luaState, Movie::swimDestPosZ);
-
-			status = lua_pcall(luaState, 2, LUA_MULTRET, 0);
-		}
-		
-		if (status != 0)
-		{
-			HandleLuaErrors(luaState, status);
-			lua_close(luaState);
-
-			Movie::swimStarted = false;
-			return;
-		}
-
-		Movie::swimInProgress = true;
-	}
-	else if (!Movie::swimStarted && Movie::swimInProgress) 	//Cancel Superswim
-	{
-		lua_getglobal(luaState, "cancelSwim");
-
-		int status = lua_pcall(luaState, 0, LUA_MULTRET, 0);
-
-		if (status != 0)
-		{
-			HandleLuaErrors(luaState, status);
-		}
-
-		lua_close(luaState);
-
-		Movie::swimInProgress = false;
-
-		return;
-	}
-	else if (Movie::swimStarted && Movie::swimInProgress)
-	{
-		//Call Update function
-		lua_getglobal(luaState, "updateSwim");
-
-		int status = lua_pcall(luaState, 0, LUA_MULTRET, 0);
-
-		if (status != 0)
-		{
-			HandleLuaErrors(luaState, status);
-
-			lua_close(luaState);
-
-			Movie::swimInProgress = false;
-			Movie::swimStarted = false;
-			return;
-		}
-
-		//LUA Callbacks
-		if (Movie::lua_isStateOperation)
-		{
-			if (Movie::lua_isStateSaved)
-			{
-				//Saved State Callback
-				lua_getglobal(luaState, "onStateSaved");
-
-				int status = lua_pcall(luaState, 0, LUA_MULTRET, 0);
-
-				if (status != 0)
-				{
-					HandleLuaErrors(luaState, status);
-
-					lua_close(luaState);
-
-					Movie::swimInProgress = false;
-					Movie::swimStarted = false;
-				}
-
-				Movie::lua_isStateOperation = false;
-				Movie::lua_isStateSaved = false;
-				Movie::lua_isStateLoaded = false;
-
-				return;
-			}
-			else if (Movie::lua_isStateLoaded)
-			{
-				//Loaded State Callback
-				lua_getglobal(luaState, "onStateLoaded");
-
-				int status = lua_pcall(luaState, 0, LUA_MULTRET, 0);
-
-				if (status != 0)
-				{
-					HandleLuaErrors(luaState, status);
-
-					lua_close(luaState);
-
-					Movie::swimInProgress = false;
-					Movie::swimStarted = false;
-				}
-
-				Movie::lua_isStateOperation = false;
-				Movie::lua_isStateSaved = false;
-				Movie::lua_isStateLoaded = false;
-
-				return;
-			}
-		}
-	}
 }
-

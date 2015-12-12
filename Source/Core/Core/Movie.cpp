@@ -33,8 +33,6 @@
 #include "InputCommon/GCPadStatus.h"
 #include "VideoCommon/VideoConfig.h"
 
-#include <vld.h>
-
 //Dragonbane
 #include "Core/Host.h"
 
@@ -117,11 +115,6 @@ u8 tunerActionID = 0;
 u8 tunerExecuteID = 0;
 u8 tunerStatus = 0; //Disabled by default
 static u8 s_numGBAs; //Dragonbane
-
-//LUA Stuff
-bool lua_isStateOperation = false;
-bool lua_isStateSaved = false;
-bool lua_isStateLoaded = false;
 
 
 static u8 s_numPads = 0;

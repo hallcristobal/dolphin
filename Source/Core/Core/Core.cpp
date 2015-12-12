@@ -28,6 +28,7 @@
 #include "Core/Host.h"
 #include "Core/MemTools.h"
 #include "Core/Movie.h"
+#include "Core/LUA/Lua.h" //Dragonbane
 #include "Core/NetPlayProto.h"
 #include "Core/PatchEngine.h"
 #include "Core/State.h"
@@ -336,6 +337,8 @@ void EmuThread()
 
 	Movie::Init();
 
+	Lua::Init(); //Dragonbane
+
 	HW::Init();
 
 	if (!g_video_backend->Initialize(s_window_handle))
@@ -499,6 +502,8 @@ void EmuThread()
 	INFO_LOG(CONSOLE, "Stop [Video Thread]\t\t---- Shutdown complete ----");
 	Movie::Shutdown();
 	PatchEngine::Shutdown();
+
+	Lua::Shutdown(); //Dragonbane
 
 	s_is_stopping = false;
 

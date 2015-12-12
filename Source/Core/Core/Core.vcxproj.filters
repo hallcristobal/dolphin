@@ -136,6 +136,9 @@
     <Filter Include="PowerPC\JitILCommon">
       <UniqueIdentifier>{827afa93-1a80-4835-93ae-b5516d95867f}</UniqueIdentifier>
     </Filter>
+    <Filter Include="LUA">
+      <UniqueIdentifier>{ec740a32-c5ee-4699-a911-49eefc8ae232}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="BootManager.cpp" />
@@ -634,9 +637,6 @@
     <ClCompile Include="PowerPC\SignatureDB.cpp">
       <Filter>PowerPC</Filter>
     </ClCompile>
-    <ClCompile Include="PowerPC\Jit64Common\Jit64AsmCommon.cpp">
-      <Filter>PowerPC\Jit64Common</Filter>
-    </ClCompile>
     <ClCompile Include="PowerPC\JitCommon\Jit_Util.cpp">
       <Filter>PowerPC\JitCommon</Filter>
     </ClCompile>
@@ -725,6 +725,10 @@
     </ClCompile>
     <ClCompile Include="HW\GCKeyboard.cpp">
       <Filter>HW %28Flipper/Hollywood%29\GCKeyboard</Filter>
+    </ClCompile>
+    <ClCompile Include="PowerPC\Jit64Common\Jit64AsmCommon.cpp" />
+    <ClCompile Include="LUA\Lua.cpp">
+      <Filter>LUA</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -1193,9 +1197,6 @@
     <ClInclude Include="PowerPC\SignatureDB.h">
       <Filter>PowerPC</Filter>
     </ClInclude>
-    <ClInclude Include="PowerPC\Jit64Common\Jit64AsmCommon.h">
-      <Filter>PowerPC\Jit64Common</Filter>
-    </ClInclude>
     <ClInclude Include="PowerPC\JitCommon\Jit_Util.h">
       <Filter>PowerPC\JitCommon</Filter>
     </ClInclude>
@@ -1236,6 +1237,10 @@
     </ClInclude>
     <ClInclude Include="HW\GCKeyboard.h">
       <Filter>HW %28Flipper/Hollywood%29\GCKeyboard</Filter>
+    </ClInclude>
+    <ClInclude Include="PowerPC\Jit64Common\Jit64AsmCommon.h" />
+    <ClInclude Include="LUA\Lua.h">
+      <Filter>LUA</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

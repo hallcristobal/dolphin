@@ -49,6 +49,7 @@
 #include "Core/CoreParameter.h"
 #include "Core/Host.h"
 #include "Core/Movie.h"
+#include "Core/LUA/Lua.h" //Dragonbane
 #include "Core/State.h"
 #include "Core/HW/CPU.h"
 #include "Core/HW/DVDInterface.h"
@@ -2322,6 +2323,28 @@ void CFrame::UpdateGUI()
 
 		Movie::checkSave = false;
 		Movie::uncheckSave = false;
+	}
+
+	//Savestate functions for LUA
+	if (Lua::lua_isStateOperation && !Lua::lua_isStateDone)
+	{
+		Lua::lua_isStateDone = true;
+
+		if (Lua::m_stateData.doSave) //Save State
+		{
+			if (Lua::m_stateData.useSlot)
+				State::Save(Lua::m_stateData.slotID);
+			else
+				State::SaveAs(File::GetUserPath(D_STATESAVES_IDX) + Lua::m_stateData.fileName);
+		}
+		else //Load State
+		{
+			if (Lua::m_stateData.useSlot)
+				State::Load(Lua::m_stateData.slotID);
+			else
+				State::LoadAs(File::GetUserPath(D_STATESAVES_IDX) + Lua::m_stateData.fileName);
+
+		}
 	}
 }
 

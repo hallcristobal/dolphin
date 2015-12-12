@@ -15,6 +15,7 @@
 #include "Core/Core.h"
 #include "Core/CoreTiming.h"
 #include "Core/Movie.h"
+#include "Core/LUA/Lua.h" //Dragonbane
 #include "Core/State.h"
 #include "Core/HW/CPU.h"
 #include "Core/HW/DSP.h"
@@ -301,8 +302,8 @@ static void CompressAndDumpState(CompressAndDumpState_args save_args)
 
 
 	//Dragonbane:: Callback for LUA
-	if (Movie::lua_isStateOperation)
-		Movie::lua_isStateSaved = true;
+	if (Lua::lua_isStateOperation)
+		Lua::lua_isStateSaved = true;
 }
 
 void SaveAs(const std::string& filename, bool wait)
@@ -490,8 +491,8 @@ void LoadAs(const std::string& filename)
 			}
 
 			//Dragonbane:: Callback for LUA
-			if (Movie::lua_isStateOperation)
-				Movie::lua_isStateLoaded = true;
+			if (Lua::lua_isStateOperation)
+				Lua::lua_isStateLoaded = true;
 		}
 		else
 		{

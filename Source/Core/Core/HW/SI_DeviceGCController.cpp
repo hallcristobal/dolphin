@@ -5,6 +5,7 @@
 #include "Core/Core.h"
 #include "Core/CoreTiming.h"
 #include "Core/Movie.h"
+#include "Core/LUA/Lua.h" //Dragonbane
 #include "Core/HW/EXI_Device.h"
 #include "Core/HW/EXI_DeviceMic.h"
 #include "Core/HW/GCPad.h"
@@ -129,6 +130,12 @@ GCPadStatus CSIDevice_GCController::GetPadStatus()
 #if defined(__LIBUSB__) || defined (_WIN32)
 	SI_GCAdapter::Input(ISIDevice::m_iDeviceNumber, &PadStatus);
 #endif
+
+	//Dragonbane: Execute Lua scripts when no Movie is currently playing
+	if (!Movie::IsPlayingInput())
+	{
+		Lua::ExecuteScripts(&PadStatus);
+	}
 
 	Movie::CallGCInputManip(&PadStatus, ISIDevice::m_iDeviceNumber);
 
