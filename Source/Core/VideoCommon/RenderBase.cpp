@@ -467,7 +467,7 @@ void Renderer::DrawDebugText()
 
 	if (memoryLoad > 90)
 	{
-		memory = StringFromFormat("Attention: Available RAM < 10%");
+		memory = StringFromFormat("Attention: Available RAM < 10%%");
 
 		g_renderer->RenderText(memory, 200, 20, 0xFFFF00FF);
 	}
