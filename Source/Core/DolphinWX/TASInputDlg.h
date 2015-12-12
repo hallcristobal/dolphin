@@ -67,6 +67,7 @@ class TASInputDlg : public wxDialog
 		void iSetCStickY(int yVal);
 		void iSaveState(bool toSlot, int slotID, std::string fileName);
 		void iLoadState(bool fromSlot, int slotID, std::string fileName);
+		bool iIsGUIThread();
 
 	private:
 		const int ID_C_STICK = 1001;

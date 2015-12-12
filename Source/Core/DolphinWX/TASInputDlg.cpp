@@ -368,6 +368,16 @@ int GetFrameCount(lua_State *L)
 	return 1; // number of return values
 }
 
+int IsGUIThread(lua_State *L)
+{
+	int argc = lua_gettop(L);
+	bool isGUI = luaInstance->iIsGUIThread();
+	BOOL output = isGUI;
+
+	lua_pushboolean(L, output); // return value
+	return 1; // number of return values
+}
+
 int MsgBox(lua_State *L)
 {
 	int argc = lua_gettop(L);
@@ -790,7 +800,7 @@ void TASInputDlg::SetStickValue(bool* ActivatedByKeyboard, int* AmountPressed, w
 	{
 		return;
 	}
-	
+
 	Textbox->ChangeValue(std::to_string(*AmountPressed));
 	wxCommandEvent* evt = new wxCommandEvent(wxEVT_TEXT, Textbox->GetId());
 	evt->SetEventObject(Textbox);
@@ -815,7 +825,7 @@ void TASInputDlg::SetSliderValue(Control* control, int CurrentValue, int default
 	{
 		return;
 	}
-	
+
 	wxCommandEvent* evt = new wxCommandEvent(wxEVT_TEXT, control->text_id);
 	evt->SetEventObject(control->text);
 	wxQueueEvent(this, evt);
@@ -834,6 +844,7 @@ void TASInputDlg::SetButtonValue(Button* button, bool CurrentState)
 		button->checkbox->SetValue(CurrentState);
 	}
 }
+
 
 void TASInputDlg::SetWiiButtons(u16* butt)
 {
@@ -1048,6 +1059,7 @@ void TASInputDlg::GetValues(GCPadStatus* PadStatus)
 	//Dragonbane: Execute custom scripts
 	ExecuteScripts();
 
+
 	PadStatus->stickX = m_main_stick.x_cont.value;
 	PadStatus->stickY = m_main_stick.y_cont.value;
 	PadStatus->substickX = m_c_stick.x_cont.value;
@@ -1107,6 +1119,7 @@ void TASInputDlg::UpdateFromText(wxCommandEvent& event)
 		{
 			int v = (value > control->range) ? control->range : value;
 			control->slider->SetValue(v);
+			control->text->ChangeValue(std::to_string(v));
 			control->value = v;
 		}
 	}
@@ -1402,21 +1415,26 @@ void TASInputDlg::iReleaseButton(const char* button)
 	else if (!strcmp(button, "D-Right"))
 		m_dpad_right.checkbox->SetValue(false);
 }
+
 void TASInputDlg::iSetMainStickX(int xVal)
 {
-	m_main_stick.x_cont.text->SetValue(std::to_string(xVal));
+	m_main_stick.x_cont.value = xVal;
+	//SetStickValue(&m_main_stick.x_cont.set_by_keyboard, &m_main_stick.x_cont.value, m_main_stick.x_cont.text, xVal);
 }
 void TASInputDlg::iSetMainStickY(int yVal)
 {
-	m_main_stick.y_cont.text->SetValue(std::to_string(yVal));
+	m_main_stick.y_cont.value = yVal;
+	//SetStickValue(&m_main_stick.y_cont.set_by_keyboard, &m_main_stick.y_cont.value, m_main_stick.y_cont.text, yVal);
 }
 void TASInputDlg::iSetCStickX(int xVal)
 {
-	m_c_stick.x_cont.text->SetValue(std::to_string(xVal));
+	m_c_stick.x_cont.value = xVal;
+	//SetStickValue(&m_c_stick.x_cont.set_by_keyboard, &m_c_stick.x_cont.value, m_c_stick.x_cont.text, xVal);
 }
 void TASInputDlg::iSetCStickY(int yVal)
 {
-	m_c_stick.y_cont.text->SetValue(std::to_string(yVal));
+	m_c_stick.y_cont.value = yVal;
+	//SetStickValue(&m_c_stick.y_cont.set_by_keyboard, &m_c_stick.y_cont.value, m_c_stick.y_cont.text, yVal);
 }
 void TASInputDlg::iSaveState(bool toSlot, int slotID, std::string fileName)
 {
@@ -1465,6 +1483,11 @@ void TASInputDlg::iLoadState(bool fromSlot, int slotID, std::string fileName)
 		evt->SetClientData(&m_stateData);
 		wxQueueEvent(this, evt);
 	}
+}
+
+bool TASInputDlg::iIsGUIThread()
+{
+	return (wxIsMainThread());
 }
 
 void TASInputDlg::OnSaveState(wxCommandEvent& event)
@@ -1779,6 +1802,7 @@ void TASInputDlg::ExecuteScripts()
 		lua_register(luaState, "LoadState", LoadState);
 
 		lua_register(luaState, "GetFrameCount", GetFrameCount);
+		lua_register(luaState, "IsGUIThread", IsGUIThread);
 		lua_register(luaState, "MsgBox", MsgBox);
 		lua_register(luaState, "AbortSwim", AbortSwim);
 
@@ -1803,6 +1827,7 @@ void TASInputDlg::ExecuteScripts()
 			lua_close(luaState);
 
 			Movie::swimStarted = false;
+			return;
 		}
 
 		Movie::swimInProgress = true;
@@ -1821,9 +1846,27 @@ void TASInputDlg::ExecuteScripts()
 		lua_close(luaState);
 
 		Movie::swimInProgress = false;
+
+		return;
 	}
 	else if (Movie::swimStarted && Movie::swimInProgress)
 	{
+		//Call Update function
+		lua_getglobal(luaState, "updateSwim");
+
+		int status = lua_pcall(luaState, 0, LUA_MULTRET, 0);
+
+		if (status != 0)
+		{
+			HandleLuaErrors(luaState, status);
+
+			lua_close(luaState);
+
+			Movie::swimInProgress = false;
+			Movie::swimStarted = false;
+			return;
+		}
+
 		//LUA Callbacks
 		if (Movie::lua_isStateOperation)
 		{
@@ -1847,6 +1890,8 @@ void TASInputDlg::ExecuteScripts()
 				Movie::lua_isStateOperation = false;
 				Movie::lua_isStateSaved = false;
 				Movie::lua_isStateLoaded = false;
+
+				return;
 			}
 			else if (Movie::lua_isStateLoaded)
 			{
@@ -1868,24 +1913,8 @@ void TASInputDlg::ExecuteScripts()
 				Movie::lua_isStateOperation = false;
 				Movie::lua_isStateSaved = false;
 				Movie::lua_isStateLoaded = false;
-			}
-		}
-		
-		//Call Update function
-		if (Movie::swimStarted && Movie::swimInProgress)
-		{
-			lua_getglobal(luaState, "updateSwim");
 
-			int status = lua_pcall(luaState, 0, LUA_MULTRET, 0);
-
-			if (status != 0)
-			{
-				HandleLuaErrors(luaState, status);
-
-				lua_close(luaState);
-
-				Movie::swimInProgress = false;
-				Movie::swimStarted = false;
+				return;
 			}
 		}
 	}
