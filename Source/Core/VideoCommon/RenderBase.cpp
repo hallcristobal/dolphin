@@ -43,6 +43,11 @@
 #include "VideoCommon/VideoConfig.h"
 #include "VideoCommon/XFMemory.h"
 
+//Dragonbane
+#include "windows.h"
+#include "psapi.h"
+
+
 // TODO: Move these out of here.
 int frameCount;
 int OSDChoice;
@@ -429,6 +434,42 @@ void Renderer::DrawDebugText()
 	else if (Movie::IsPlayingInput())
 	{
 		g_renderer->RenderText("PLAYBACK", 20, 0, 0xFF00FF00);
+	}
+
+	//Dragonbane: Memory Warning
+	/*
+	PROCESS_MEMORY_COUNTERS pmc;
+	GetProcessMemoryInfo(GetCurrentProcess(), &pmc, sizeof(pmc));
+	SIZE_T ramUsage = pmc.WorkingSetSize;
+
+	std::string memory;
+
+	if (ramUsage > 1340000000)
+	{
+		memory = StringFromFormat("Attention: Critical RAM Usage!");
+
+		g_renderer->RenderText(memory, 200, 0, 0xFFFF00FF);
+	}
+	*/
+
+	//Dragonbane: Memory Warning
+	MEMORYSTATUSEX memInfo;
+	memInfo.dwLength = sizeof(MEMORYSTATUSEX);
+	GlobalMemoryStatusEx(&memInfo);
+
+	DWORD memoryLoad = memInfo.dwMemoryLoad;
+	DWORDLONG freeRAM = memInfo.ullAvailPhys;
+
+	std::string memory;
+
+	//memory = StringFromFormat("Memory Load: %d | Avail RAM: %d", memoryLoad, freeRAM);
+	//g_renderer->RenderText(memory, 70, 30, 0xFFFF00FF);
+
+	if (memoryLoad > 90)
+	{
+		memory = StringFromFormat("Attention: Available RAM < 10%");
+
+		g_renderer->RenderText(memory, 200, 20, 0xFFFF00FF);
 	}
 
 	std::string gameID = SConfig::GetInstance().m_LocalCoreStartupParameter.GetUniqueID();
