@@ -2359,6 +2359,7 @@ void PlayController(GCPadStatus* PadStatus, int controllerID)
 				Core::DisplayMessage(message, 2000);
 
 				desyncCount += 1;
+			}
 		}
 	}
 
