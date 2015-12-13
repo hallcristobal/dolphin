@@ -1424,6 +1424,35 @@ void CheckPadStatus(GCPadStatus* PadStatus, int controllerID)
 		}
 	}
 
+	//FSA Stuff
+	bool isFSA = false;
+
+	if (!gameID.compare("G4SJ01"))
+	{
+		charPointerAddress = 0x531948;
+		isLoadingAdd = 0x95DB20;
+
+		isFSA = true;
+	}
+
+	if (isFSA)
+	{
+		u32 characterpointer = Memory::Read_U32(charPointerAddress);
+		u32 isLoading = Memory::Read_U32(isLoadingAdd);
+
+		if (isLoading > 0)
+			s_padState.loading = true;
+		else
+			s_padState.loading = false;
+
+		if (characterpointer > 0x80000000 && isLoading == 0)
+		{
+			characterpointer -= 0x80000000;
+
+			s_padState.LinkX = Memory::Read_F32(characterpointer + 0x8C);
+			s_padState.LinkZ = Memory::Read_F32(characterpointer + 0x90);
+		}
+	}
 
 	SetInputDisplayString(s_padState, controllerID);
 }
@@ -1985,6 +2014,16 @@ void PlayController(GCPadStatus* PadStatus, int controllerID)
 		isTWW = true;
 	}
 
+	//FSA Stuff
+	bool isFSA = false;
+
+	if (!gameID.compare("G4SJ01"))
+	{
+		charPointerAddress = 0x531948;
+		isLoadingAdd = 0x95DB20;
+
+		isFSA = true;
+	}
 
 	/*
 	bool memoryUpdated = false;
@@ -2297,6 +2336,29 @@ void PlayController(GCPadStatus* PadStatus, int controllerID)
 
 				desyncCount += 1;
 			}
+		}
+	}
+
+
+	//FSA Stuff
+	if (isFSA)
+	{
+		u32 characterpointer = Memory::Read_U32(charPointerAddress);
+		u32 isLoading = Memory::Read_U32(isLoadingAdd);
+
+		if (characterpointer > 0x80000000 && isLoading == 0)
+		{
+			characterpointer -= 0x80000000;
+
+			float LinkX = Memory::Read_F32(characterpointer + 0x8C);
+			float LinkZ = Memory::Read_F32(characterpointer + 0x90);
+
+			if (s_padState.LinkX != LinkX || s_padState.LinkZ != LinkZ)
+			{
+				std::string message = StringFromFormat("Desync detected on frame: %d!", g_currentFrame);
+				Core::DisplayMessage(message, 2000);
+
+				desyncCount += 1;
 		}
 	}
 

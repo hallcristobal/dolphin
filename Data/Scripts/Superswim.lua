@@ -359,5 +359,3 @@ function updateSwim()
 	end
 
 end
-
-
