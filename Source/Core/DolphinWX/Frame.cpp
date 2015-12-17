@@ -6,8 +6,6 @@
 #include <Cocoa/Cocoa.h>
 #endif
 
-#include <vld.h>
-
 #include <cstddef>
 #include <fstream>
 #include <string>

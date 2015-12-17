@@ -422,18 +422,26 @@ void Renderer::DrawDebugText()
 	if (g_ActiveConfig.bOverlayProjStats)
 		final_cyan += Statistics::ToStringProj();
 
+	//Dragonbane: OpenGL needs +20 on Y Plane
+	int height = 0;
+
+	if (SConfig::GetInstance().m_LocalCoreStartupParameter.m_strVideoBackend.compare("Direct3D") && SConfig::GetInstance().m_LocalCoreStartupParameter.m_strVideoBackend.compare("D3D"))
+	{
+		height = 20;
+	}
+
 	//and then the text
-	g_renderer->RenderText(final_cyan, 20, 20, 0xFF00FFFF);
-	g_renderer->RenderText(final_yellow, 20, 20, 0xFFFFFF00);
+	g_renderer->RenderText(final_cyan, 20, 20 + height, 0xFF00FFFF);
+	g_renderer->RenderText(final_yellow, 20, 20 + height, 0xFFFFFF00);
 
 	//Dragonbane: Recording Notice
 	if (Movie::IsRecordingInput())
 	{
-		g_renderer->RenderText("RECORDING", 20, 0, 0xFFFF00FF);
+		g_renderer->RenderText("RECORDING", 20, 0 + height, 0xFFFF00FF);
 	}
 	else if (Movie::IsPlayingInput())
 	{
-		g_renderer->RenderText("PLAYBACK", 20, 0, 0xFF00FF00);
+		g_renderer->RenderText("PLAYBACK", 20, 0 + height, 0xFF00FF00);
 	}
 
 	//Dragonbane: Memory Warning
@@ -465,11 +473,11 @@ void Renderer::DrawDebugText()
 	//memory = StringFromFormat("Memory Load: %d | Avail RAM: %d", memoryLoad, freeRAM);
 	//g_renderer->RenderText(memory, 70, 30, 0xFFFF00FF);
 
-	if (memoryLoad > 90)
+	if (memoryLoad > 95)
 	{
-		memory = StringFromFormat("Attention: Available RAM < 10%%");
+		memory = StringFromFormat("Attention: Available RAM < 5%%");
 
-		g_renderer->RenderText(memory, 200, 20, 0xFFFF00FF);
+		g_renderer->RenderText(memory, 200, 20 + height, 0xFFFF00FF);
 	}
 
 	std::string gameID = SConfig::GetInstance().m_LocalCoreStartupParameter.GetUniqueID();
@@ -492,7 +500,7 @@ void Renderer::DrawDebugText()
 		else
 			tunerInfo.append("N/A");
 
-		g_renderer->RenderText(tunerInfo, 200, 0, 0xFFFFFF00);
+		g_renderer->RenderText(tunerInfo, 200, 0 + height, 0xFFFFFF00);
 	}
 }
 
