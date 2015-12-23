@@ -33,6 +33,7 @@
 #include "DolphinWX/TPVideoComparison.h"
 #include "DolphinWX/TWWSuperswim.h"
 #include "DolphinWX/TWWTunerInput.h"
+#include "DolphinWX/LaunchLuaScript.h"
 
 
 #if defined(HAVE_X11) && HAVE_X11
@@ -114,7 +115,9 @@ public:
 	TPLoadManager* g_TPLoadManager;
 	TPVideoComparison* g_TPVideoComparison;
 	TWWSuperswim* g_TWWSuperswim;
-	TWWTunerInput* g_TWWTunerInput;
+	TWWTunerInput* g_TWWTunerInput; 
+	LuaWindow* g_ScriptLauncher;
+
 
 	void InitBitmaps();
 	void DoPause();
@@ -339,6 +342,7 @@ private:
 	void OnTPVideoComparison(wxCommandEvent& event); //Dragonbane
 	void OnTWWSuperSwim(wxCommandEvent& event); //Dragonbane
 	void OnTWWTunerInput(wxCommandEvent& event); //Dragonbane
+	void OnScriptLaunch(wxCommandEvent& event); //Dragonbane
 	void OnImportSave(wxCommandEvent& event);
 	void OnExportAllSaves(wxCommandEvent& event);
 

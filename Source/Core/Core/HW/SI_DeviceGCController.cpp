@@ -131,10 +131,11 @@ GCPadStatus CSIDevice_GCController::GetPadStatus()
 	SI_GCAdapter::Input(ISIDevice::m_iDeviceNumber, &PadStatus);
 #endif
 
-	//Dragonbane: Execute Lua scripts when no Movie is currently playing
+	//Dragonbane: Update Lua Scripts when no Movie is currently playing
 	if (!Movie::IsPlayingInput())
 	{
-		Lua::ExecuteScripts(&PadStatus);
+		Lua::UpdateSuperswimScript(&PadStatus); //Superswim Script needs authority over PadStatus
+		Lua::UpdateScripts(&PadStatus);
 	}
 
 	Movie::CallGCInputManip(&PadStatus, ISIDevice::m_iDeviceNumber);

@@ -6,15 +6,16 @@
 
 #include "Common/ChunkFile.h"
 #include "Common/CommonPaths.h"
-#include "Common/FileUtil.h"
 #include "Common/Hash.h"
 #include "Common/NandPaths.h"
-#include "Common/StringUtil.h"
 #include "Common/Thread.h"
 #include "Common/Timer.h"
 #include "Core/ConfigManager.h"
 #include "Core/Core.h"
 #include "Core/CoreTiming.h"
+#include "Common/FileSearch.h"
+#include "Common/FileUtil.h"
+#include "Common/StringUtil.h"
 #include "Core/Movie.h"
 #include "Core/LUA/Lua.h"
 #include "Core/NetPlayProto.h"
@@ -396,6 +397,15 @@ int AbortSwim(lua_State *L)
 	return 0; // number of return values
 }
 
+int CancelScript(lua_State *L)
+{
+	int argc = lua_gettop(L);
+
+	Lua::iCancelCurrentScript();
+
+	return 0; // number of return values
+}
+
 void HandleLuaErrors(lua_State *L, int status)
 {
 	if (status != 0)
@@ -412,7 +422,11 @@ void HandleLuaErrors(lua_State *L, int status)
 namespace Lua
 {
 	//Dragonbane: Lua Stuff
-	static lua_State *luaState;
+	static lua_State *luaState_Superswim;
+
+	static std::list<LuaScript> scriptList;
+	static int currScriptID;
+
 	static GCPadStatus PadLocal;
 
 	const int m_gc_pad_buttons_bitmask[12] = {
@@ -420,24 +434,14 @@ namespace Lua
 		PAD_BUTTON_X, PAD_BUTTON_Y, PAD_TRIGGER_Z, PAD_TRIGGER_L, PAD_TRIGGER_R, PAD_BUTTON_START
 	};
 
+	//LUA Savestate Stuff
 	StateEvent m_stateData;
 
-	//LUA Stuff
 	bool lua_isStateOperation = false;
 	bool lua_isStateSaved = false;
 	bool lua_isStateLoaded = false;
 	bool lua_isStateDone = false;
 
-
-	void Init()
-	{
-		
-	}
-	void Shutdown()
-	{
-
-
-	}
 
 	//Dragonbane: Lua Wrapper Functions
 	void iPressButton(const char* button)
@@ -579,6 +583,22 @@ namespace Lua
 		lua_isStateDone = false;
 		lua_isStateOperation = true;
 
+		if (currScriptID != -1)
+		{
+			int n = 0;
+
+			for (std::list<LuaScript>::iterator it = scriptList.begin(); it != scriptList.end(); ++it)
+			{
+				if (currScriptID == n)
+				{
+					it->wantsSavestateCallback = true;
+					break;
+				}
+
+				++n;
+			}
+		}
+
 		Host_UpdateMainFrame();
 	}
 	void iLoadState(bool fromSlot, int slotID, std::string fileName)
@@ -593,111 +613,354 @@ namespace Lua
 		lua_isStateDone = false;
 		lua_isStateOperation = true;
 
+		if (currScriptID != -1)
+		{
+			int n = 0;
+
+			for (std::list<LuaScript>::iterator it = scriptList.begin(); it != scriptList.end(); ++it)
+			{
+				if (currScriptID == n)
+				{
+					it->wantsSavestateCallback = true;
+					break;
+				}
+
+				++n;
+			}
+		}
+
 		Host_UpdateMainFrame();
 	}
+	void iCancelCurrentScript()
+	{
+		int n = 0;
 
-	//Dragonbane: Custom Lua Scripts
-	void ExecuteScripts(GCPadStatus* PadStatus)
+		for (std::list<LuaScript>::iterator it = scriptList.begin(); it != scriptList.end(); ++it)
+		{
+			if (currScriptID == n)
+			{
+				it->requestedTermination = true;
+				break;
+			}
+
+			++n;
+		}
+	}
+
+
+	//Main Functions
+	static void RegisterGeneralLuaFunctions(lua_State* luaState)
+	{
+		//Make C functions available to Lua programs
+		lua_register(luaState, "ReadValue8", ReadValue8);
+		lua_register(luaState, "ReadValue16", ReadValue16);
+		lua_register(luaState, "ReadValue32", ReadValue32);
+		lua_register(luaState, "ReadValueFloat", ReadValueFloat);
+		lua_register(luaState, "ReadValueString", ReadValueString);
+		lua_register(luaState, "GetPointerNormal", GetPointerNormal);
+
+		lua_register(luaState, "WriteValue8", WriteValue8);
+		lua_register(luaState, "WriteValue16", WriteValue16);
+		lua_register(luaState, "WriteValue32", WriteValue32);
+		lua_register(luaState, "WriteValueFloat", WriteValueFloat);
+		lua_register(luaState, "WriteValueString", WriteValueString);
+
+		lua_register(luaState, "PressButton", PressButton);
+		lua_register(luaState, "ReleaseButton", ReleaseButton);
+		lua_register(luaState, "SetMainStickX", SetMainStickX);
+		lua_register(luaState, "SetMainStickY", SetMainStickY);
+		lua_register(luaState, "SetCStickX", SetCStickX);
+		lua_register(luaState, "SetCStickY", SetCStickY);
+
+		lua_register(luaState, "SaveState", SaveState);
+		lua_register(luaState, "LoadState", LoadState);
+
+		lua_register(luaState, "GetFrameCount", GetFrameCount);
+		lua_register(luaState, "MsgBox", MsgBox);
+	}
+
+	void Init()
+	{
+		//For Pad manipulation
+		memset(&PadLocal, 0, sizeof(PadLocal));
+
+		//Auto launch Scripts that start with _
+		CFileSearch::XStringVector Directory;
+		Directory.push_back(File::GetExeDirectory() + "\\Scripts");
+
+		CFileSearch::XStringVector Extension;
+		Extension.push_back("*.lua");
+
+		CFileSearch FileSearch(Extension, Directory);
+		const CFileSearch::XStringVector& rFilenames = FileSearch.GetFileNames();
+
+		if (rFilenames.size() > 0)
+		{
+			for (u32 i = 0; i < rFilenames.size(); i++)
+			{
+				std::string FileName;
+				SplitPath(rFilenames[i], nullptr, &FileName, nullptr);
+
+				if (!FileName.substr(0, 1).compare("_"))
+				{
+					LoadScript(FileName + ".lua");
+				}
+			}
+		}
+	}
+
+	void Shutdown()
+	{
+		//Kill all Scripts
+		for (std::list<LuaScript>::iterator it = scriptList.begin(); it != scriptList.end(); ++it)
+		{
+			if (it->hasStarted)
+			{
+				lua_close(it->luaState);
+			}
+		}
+
+		scriptList.clear();
+	}
+
+	void LoadScript(std::string fileName)
+	{
+		LuaScript newScript;
+
+		newScript.wantsSavestateCallback = false;
+		newScript.requestedTermination = false;
+		newScript.hasStarted = false;
+		newScript.fileName = fileName;
+
+		scriptList.push_back(newScript);
+	}
+
+	void TerminateScript(std::string fileName)
+	{
+		for (std::list<LuaScript>::iterator it = scriptList.begin(); it != scriptList.end(); ++it) //could this crash when an entry is deleted by the CPU thread during this?
+		{
+			if (it->fileName == fileName)
+			{
+				it->requestedTermination = true;
+				break;
+			}
+		}
+	}
+
+	bool IsScriptRunning(std::string fileName)
+	{
+		for (std::list<LuaScript>::iterator it = scriptList.begin(); it != scriptList.end(); ++it)
+		{
+			if (it->fileName == fileName)
+			{
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+
+	//Called every input frame (60 times per second in TP)
+	void UpdateScripts(GCPadStatus* PadStatus)
 	{
 		if (!Core::IsRunningAndStarted())
 			return;
 
-		std::string gameID = SConfig::GetInstance().m_LocalCoreStartupParameter.GetUniqueID();
-		u32 isLoadingAdd;
-		u32 eventFlagAdd;
-		u32 charPointerAdd;
-		bool isTP = false;
+		//Update Local Pad
+		PadLocal = *PadStatus;
 
-		if (!gameID.compare("GZ2E01"))
-		{
-			eventFlagAdd = 0x40b16d;
-			isLoadingAdd = 0x450ce0;
+		//Iterate through all the loaded LUA Scripts
+		int n = 0;
+		std::list<LuaScript>::iterator it = scriptList.begin();
 
-			isTP = true;
+		while (it != scriptList.end())
+		{ 
+			int status = 0;
+			currScriptID = n; //Update Script ID for Wrapper Functions
+
+			if (it->hasStarted == false) //Start Script
+			{
+				//Create new LUA State
+				it->luaState = luaL_newstate();
+
+				//Open standard LUA libraries
+				luaL_openlibs(it->luaState);
+
+				//Register C Functions
+				RegisterGeneralLuaFunctions(it->luaState);
+
+				//Unique to normal Scripts
+				lua_register(it->luaState, "CancelScript", CancelScript);
+
+				std::string file = File::GetExeDirectory() + "\\Scripts\\" + it->fileName;
+
+				status = luaL_dofile(it->luaState, file.c_str());
+
+				if (status == 0)
+				{
+					//Execute Start function
+					lua_getglobal(it->luaState, "onScriptStart");
+
+					status = lua_pcall(it->luaState, 0, LUA_MULTRET, 0);
+				}
+
+				if (status != 0)
+				{
+					HandleLuaErrors(it->luaState, status);
+					lua_close(it->luaState);
+
+					it = scriptList.erase(it);
+					--n;
+				}
+				else
+				{
+					it->hasStarted = true;
+				}
+			}
+			else if (it->requestedTermination) //Cancel Script and delete the entry from the list
+			{
+				lua_getglobal(it->luaState, "onScriptCancel");
+
+				status = lua_pcall(it->luaState, 0, LUA_MULTRET, 0);
+
+				if (status != 0)
+				{
+					HandleLuaErrors(it->luaState, status);
+				}
+
+				lua_close(it->luaState);
+
+				status = -1;
+				it = scriptList.erase(it);
+				--n;
+			}
+			else //Update Script
+			{
+				//LUA Callbacks first (so Update can already react to it)
+				if (it->wantsSavestateCallback && lua_isStateOperation)
+				{
+					if (lua_isStateSaved)
+					{
+						//Saved State Callback
+						it->wantsSavestateCallback = false;
+
+						lua_getglobal(it->luaState, "onStateSaved");
+
+						status = lua_pcall(it->luaState, 0, LUA_MULTRET, 0);
+
+						if (status != 0)
+						{
+							HandleLuaErrors(it->luaState, status);
+							lua_close(it->luaState);
+
+							it = scriptList.erase(it);
+							--n;
+						}
+
+						lua_isStateOperation = false;
+						lua_isStateSaved = false;
+						lua_isStateLoaded = false;
+					}
+					else if (lua_isStateLoaded)
+					{
+						//Loaded State Callback
+						it->wantsSavestateCallback = false;
+
+						lua_getglobal(it->luaState, "onStateLoaded");
+
+						status = lua_pcall(it->luaState, 0, LUA_MULTRET, 0);
+
+						if (status != 0)
+						{
+							HandleLuaErrors(it->luaState, status);
+							lua_close(it->luaState);
+
+							it = scriptList.erase(it);
+							--n;
+						}
+
+						lua_isStateOperation = false;
+						lua_isStateSaved = false;
+						lua_isStateLoaded = false;
+					}
+				}
+
+				//Call normal Update function
+				if (status == 0)
+				{
+					lua_getglobal(it->luaState, "onScriptUpdate");
+
+					status = lua_pcall(it->luaState, 0, LUA_MULTRET, 0);
+
+					if (status != 0)
+					{
+						HandleLuaErrors(it->luaState, status);
+						lua_close(it->luaState);
+
+						it = scriptList.erase(it);
+						--n;
+					}
+				}
+			}
+
+			if (status == 0) //Next item in the list if no deletion took place
+				++it;
+
+			++n;
 		}
-		else if (!gameID.compare("GZ2P01"))
-		{
-			eventFlagAdd = 0x40d10d;
-			isLoadingAdd = 0x452ca0;
 
-			isTP = true;
-		}
+		//Send changed Pad back
+		*PadStatus = PadLocal;
+	}
 
-		//TWW Stuff
-		bool isTWW = false;
+	//Superswim Script
+	void UpdateSuperswimScript(GCPadStatus* PadStatus)
+	{
+		if (!Core::IsRunningAndStarted())
+			return;
 
-		if (!gameID.compare("GZLJ01"))
-		{
-			isLoadingAdd = 0x3ad335;
-			eventFlagAdd = 0x3bd3a2;
-			charPointerAdd = 0x3ad860;
+		currScriptID = -1; //Special ID for Superswim Script
 
-			isTWW = true;
-		}
-
-		//Superswim Script
 		if (Movie::swimStarted && !Movie::swimInProgress) //Start Superswim
 		{
-			luaState = luaL_newstate();
+			luaState_Superswim = luaL_newstate();
 
-			luaL_openlibs(luaState);
+			luaL_openlibs(luaState_Superswim);
 
 			//Reset vars
 			lua_isStateOperation = false;
 			lua_isStateSaved = false;
 			lua_isStateLoaded = false;
 
-			//For Button manipulation
-			memset(&PadLocal, 0, sizeof(PadLocal));
+			//Update Local Pad only when started (Superswim script has exclusive pad access)
 			PadLocal = *PadStatus;
 
-			//Make functions available to Lua programs
-			lua_register(luaState, "ReadValue8", ReadValue8);
-			lua_register(luaState, "ReadValue16", ReadValue16);
-			lua_register(luaState, "ReadValue32", ReadValue32);
-			lua_register(luaState, "ReadValueFloat", ReadValueFloat);
-			lua_register(luaState, "ReadValueString", ReadValueString);
-			lua_register(luaState, "GetPointerNormal", GetPointerNormal);
+			//Register C Functions
+			RegisterGeneralLuaFunctions(luaState_Superswim);
 
-			lua_register(luaState, "WriteValue8", WriteValue8);
-			lua_register(luaState, "WriteValue16", WriteValue16);
-			lua_register(luaState, "WriteValue32", WriteValue32);
-			lua_register(luaState, "WriteValueFloat", WriteValueFloat);
-			lua_register(luaState, "WriteValueString", WriteValueString);
-
-			lua_register(luaState, "PressButton", PressButton);
-			lua_register(luaState, "ReleaseButton", ReleaseButton);
-			lua_register(luaState, "SetMainStickX", SetMainStickX);
-			lua_register(luaState, "SetMainStickY", SetMainStickY);
-			lua_register(luaState, "SetCStickX", SetCStickX);
-			lua_register(luaState, "SetCStickY", SetCStickY);
-
-			lua_register(luaState, "SaveState", SaveState);
-			lua_register(luaState, "LoadState", LoadState);
-
-			lua_register(luaState, "GetFrameCount", GetFrameCount);
-			lua_register(luaState, "MsgBox", MsgBox);
-			lua_register(luaState, "AbortSwim", AbortSwim);
+			//Unique to Superswim Script
+			lua_register(luaState_Superswim, "AbortSwim", AbortSwim);
 
 			std::string file = File::GetExeDirectory() + "\\Scripts\\Superswim.lua";
 
-			int status = luaL_dofile(luaState, file.c_str());
+			int status = luaL_dofile(luaState_Superswim, file.c_str());
 
 			if (status == 0)
 			{
 				//Execute Start function
-				lua_getglobal(luaState, "startSwim");
+				lua_getglobal(luaState_Superswim, "startSwim");
 
-				lua_pushnumber(luaState, Movie::swimDestPosX);
-				lua_pushnumber(luaState, Movie::swimDestPosZ);
+				lua_pushnumber(luaState_Superswim, Movie::swimDestPosX);
+				lua_pushnumber(luaState_Superswim, Movie::swimDestPosZ);
 
-				status = lua_pcall(luaState, 2, LUA_MULTRET, 0);
+				status = lua_pcall(luaState_Superswim, 2, LUA_MULTRET, 0);
 			}
 
 			if (status != 0)
 			{
-				HandleLuaErrors(luaState, status);
-				lua_close(luaState);
+				HandleLuaErrors(luaState_Superswim, status);
+				lua_close(luaState_Superswim);
 
 				Movie::swimStarted = false;
 				return;
@@ -708,16 +971,16 @@ namespace Lua
 		}
 		else if (!Movie::swimStarted && Movie::swimInProgress) 	//Cancel Superswim
 		{
-			lua_getglobal(luaState, "cancelSwim");
+			lua_getglobal(luaState_Superswim, "cancelSwim");
 
-			int status = lua_pcall(luaState, 0, LUA_MULTRET, 0);
+			int status = lua_pcall(luaState_Superswim, 0, LUA_MULTRET, 0);
 
 			if (status != 0)
 			{
-				HandleLuaErrors(luaState, status);
+				HandleLuaErrors(luaState_Superswim, status);
 			}
 
-			lua_close(luaState);
+			lua_close(luaState_Superswim);
 
 			Movie::swimInProgress = false;
 			*PadStatus = PadLocal;
@@ -726,37 +989,23 @@ namespace Lua
 		}
 		else if (Movie::swimStarted && Movie::swimInProgress)
 		{
-			//Call Update function
-			lua_getglobal(luaState, "updateSwim");
+			int status = 0;
 
-			int status = lua_pcall(luaState, 0, LUA_MULTRET, 0);
-
-			if (status != 0)
-			{
-				HandleLuaErrors(luaState, status);
-
-				lua_close(luaState);
-
-				Movie::swimInProgress = false;
-				Movie::swimStarted = false;
-				return;
-			}
-
-			//LUA Callbacks
+			//LUA Callbacks first (so Update Swim can already react to it)
 			if (lua_isStateOperation)
 			{
 				if (lua_isStateSaved)
 				{
 					//Saved State Callback
-					lua_getglobal(luaState, "onStateSaved");
+					lua_getglobal(luaState_Superswim, "onStateSaved");
 
-					int status = lua_pcall(luaState, 0, LUA_MULTRET, 0);
+					status = lua_pcall(luaState_Superswim, 0, LUA_MULTRET, 0);
 
 					if (status != 0)
 					{
-						HandleLuaErrors(luaState, status);
+						HandleLuaErrors(luaState_Superswim, status);
 
-						lua_close(luaState);
+						lua_close(luaState_Superswim);
 
 						Movie::swimInProgress = false;
 						Movie::swimStarted = false;
@@ -765,21 +1014,19 @@ namespace Lua
 					lua_isStateOperation = false;
 					lua_isStateSaved = false;
 					lua_isStateLoaded = false;
-
-					return;
 				}
 				else if (lua_isStateLoaded)
 				{
 					//Loaded State Callback
-					lua_getglobal(luaState, "onStateLoaded");
+					lua_getglobal(luaState_Superswim, "onStateLoaded");
 
-					int status = lua_pcall(luaState, 0, LUA_MULTRET, 0);
+					status = lua_pcall(luaState_Superswim, 0, LUA_MULTRET, 0);
 
 					if (status != 0)
 					{
-						HandleLuaErrors(luaState, status);
+						HandleLuaErrors(luaState_Superswim, status);
 
-						lua_close(luaState);
+						lua_close(luaState_Superswim);
 
 						Movie::swimInProgress = false;
 						Movie::swimStarted = false;
@@ -788,7 +1035,24 @@ namespace Lua
 					lua_isStateOperation = false;
 					lua_isStateSaved = false;
 					lua_isStateLoaded = false;
+				}
+			}
 
+			if (status == 0)
+			{
+				//Call Update function
+				lua_getglobal(luaState_Superswim, "updateSwim");
+
+				status = lua_pcall(luaState_Superswim, 0, LUA_MULTRET, 0);
+
+				if (status != 0)
+				{
+					HandleLuaErrors(luaState_Superswim, status);
+
+					lua_close(luaState_Superswim);
+
+					Movie::swimInProgress = false;
+					Movie::swimStarted = false;
 					return;
 				}
 			}

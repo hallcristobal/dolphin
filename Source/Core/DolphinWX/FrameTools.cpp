@@ -68,6 +68,7 @@
 #include "DolphinWX/AboutDolphin.h"
 #include "DolphinWX/TPSavefileManager.h" //Dragonbane
 #include "DolphinWX/TPLoadManager.h" //Dragonbane
+#include "DolphinWX/LaunchLuaScript.h" //Dragonbane
 #include "DolphinWX/TPVideoComparison.h" //Dragonbane
 #include "DolphinWX/ConfigMain.h"
 #include "DolphinWX/ControllerConfigDiag.h"
@@ -297,6 +298,7 @@ wxMenuBar* CFrame::CreateMenu()
 
 	wxMenu* zeldaMenu = new wxMenu;
 	zeldaMenu->Append(IDM_TPCOMPARE, "Create Video Comparison");
+	zeldaMenu->Append(IDM_SCRIPTLAUNCH, "Execute Script");
 	zeldaMenu->AppendSeparator();
 	zeldaMenu->AppendSubMenu(tpMenu, "TP");
 	zeldaMenu->AppendSubMenu(twwMenu, "TWW");
@@ -1736,6 +1738,11 @@ void CFrame::OnTWWSuperSwim(wxCommandEvent& WXUNUSED(event))
 void CFrame::OnTWWTunerInput(wxCommandEvent& WXUNUSED(event))
 {
 	g_TWWTunerInput->Show(true);
+}
+void CFrame::OnScriptLaunch(wxCommandEvent& WXUNUSED(event))
+{
+	g_ScriptLauncher->Show(true);
+	g_ScriptLauncher->Shown();
 }
 
 void CFrame::OnExportAllSaves(wxCommandEvent& WXUNUSED (event))

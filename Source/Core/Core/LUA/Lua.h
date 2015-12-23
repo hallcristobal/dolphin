@@ -24,6 +24,15 @@ namespace Lua
 		std::string fileName = "";
 	};
 
+	struct LuaScript
+	{
+		std::string fileName;
+		lua_State *luaState;
+		bool hasStarted;
+		bool requestedTermination;
+		bool wantsSavestateCallback;
+	};
+
 	//Dragonbane: LUA Savestate support
 	extern bool lua_isStateOperation;
 	extern bool lua_isStateDone;
@@ -33,8 +42,12 @@ namespace Lua
 
 	void Init();
 	void Shutdown();
+	void LoadScript(std::string fileName);
+	void TerminateScript(std::string fileName);
+	bool IsScriptRunning(std::string fileName);
+	void UpdateScripts(GCPadStatus* PadStatus);
 
-	void ExecuteScripts(GCPadStatus* PadStatus);
+	void UpdateSuperswimScript(GCPadStatus* PadStatus);
 
 	void iPressButton(const char* button);
 	void iReleaseButton(const char* button);
@@ -44,4 +57,5 @@ namespace Lua
 	void iSetCStickY(int yVal);
 	void iSaveState(bool toSlot, int slotID, std::string fileName);
 	void iLoadState(bool fromSlot, int slotID, std::string fileName);
+	void iCancelCurrentScript();
 }

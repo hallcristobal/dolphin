@@ -112,6 +112,7 @@ enum
 	IDM_TPCOMPARE, //Dragonbane
 	IDM_SUPERSWIM, //Dragonbane
 	IDM_TUNERINPUT, //Dragonbane
+	IDM_SCRIPTLAUNCH, //Dragonbane
 	IDM_CHEATS,
 	IDM_NETPLAY,
 	IDM_RESTART,

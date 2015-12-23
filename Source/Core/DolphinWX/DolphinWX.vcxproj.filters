@@ -184,6 +184,9 @@
     <ClCompile Include="TWWTunerInput.cpp">
       <Filter>GUI\ZeldaEdition</Filter>
     </ClCompile>
+    <ClCompile Include="LaunchLuaScript.cpp">
+      <Filter>GUI\ZeldaEdition</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Main.h" />
@@ -331,6 +334,9 @@
       <Filter>GUI\ZeldaEdition</Filter>
     </ClInclude>
     <ClInclude Include="TWWTunerInput.h">
+      <Filter>GUI\ZeldaEdition</Filter>
+    </ClInclude>
+    <ClInclude Include="LaunchLuaScript.h">
       <Filter>GUI\ZeldaEdition</Filter>
     </ClInclude>
   </ItemGroup>
