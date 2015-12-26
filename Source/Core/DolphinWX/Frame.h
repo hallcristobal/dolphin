@@ -34,6 +34,7 @@
 #include "DolphinWX/TWWSuperswim.h"
 #include "DolphinWX/TWWTunerInput.h"
 #include "DolphinWX/LaunchLuaScript.h"
+#include "DolphinWX/SpliceDTM.h"
 
 
 #if defined(HAVE_X11) && HAVE_X11
@@ -117,6 +118,7 @@ public:
 	TWWSuperswim* g_TWWSuperswim;
 	TWWTunerInput* g_TWWTunerInput; 
 	LuaWindow* g_ScriptLauncher;
+	DTMSplicer* g_AttachDTM;
 
 
 	void InitBitmaps();
@@ -343,6 +345,7 @@ private:
 	void OnTWWSuperSwim(wxCommandEvent& event); //Dragonbane
 	void OnTWWTunerInput(wxCommandEvent& event); //Dragonbane
 	void OnScriptLaunch(wxCommandEvent& event); //Dragonbane
+	void OnAttachDTM(wxCommandEvent& event); //Dragonbane
 	void OnImportSave(wxCommandEvent& event);
 	void OnExportAllSaves(wxCommandEvent& event);
 

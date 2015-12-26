@@ -3317,4 +3317,79 @@ bool SaveMemCard()
 {
 	return saveMemCard;
 }
+void AttachDTM(const std::string& dtmFile, u64 fromFrame, u64 toFrame, int bytesPerFrame, const std::string& outputFile)
+{
+	File::IOFile g_recordfd;
+	DTMHeader dtmHeader;
+
+	g_recordfd.Open(dtmFile, "rb");
+	g_recordfd.ReadArray(&dtmHeader, 1);
+
+	u64 dtmTotalBytes = g_recordfd.GetSize() - 256;
+
+	size_t newAlloc = DTM_BASE_LENGTH;
+	while (newAlloc < (size_t)dtmTotalBytes)
+		newAlloc *= 2;
+
+	u8* newTmpInput = new u8[newAlloc];
+
+	g_recordfd.ReadArray(newTmpInput, (size_t)dtmTotalBytes);
+
+	g_recordfd.Close();
+
+	if (toFrame == 0)
+
+		toFrame = dtmHeader.frameCount;
+
+	if (toFrame > dtmHeader.frameCount || fromFrame > toFrame)
+	{
+		PanicAlertT("Invalid frame numbers!");
+		return;
+	}
+
+	u64 amountVisualFrames = (toFrame - fromFrame) + 1;
+	int factor = dtmHeader.inputCount / dtmHeader.frameCount;
+
+	u64 amountInputFrames = amountVisualFrames * factor;
+
+	//Set Values
+	g_totalFrames += amountVisualFrames;
+	g_totalInputCount += amountInputFrames;
+	s_totalTickCount += dtmHeader.tickCount; //VERY DIRTY
+
+	s_tickCountAtLastInput = s_totalTickCount;
+
+	u64 newTotalByteAmount = s_totalBytes + (amountInputFrames * 17);
+
+	EnsureTmpInputSize(newTotalByteAmount);
+
+	//Copy Data Over
+	u64 start = (fromFrame * factor) * bytesPerFrame;
+	u64 end = ((toFrame + 1) * factor) * bytesPerFrame;
+
+	u64 currentPos = 0;
+	u64 newPos = 0;
+
+	ControllerState s_padStateTemp;
+
+	memset(&s_padStateTemp, 0, sizeof(s_padStateTemp));
+
+	while (currentPos < end)
+	{
+		memcpy(&s_padStateTemp, &(newTmpInput[start + currentPos]), bytesPerFrame);
+
+		memcpy(&(tmpInput[s_totalBytes + newPos]), &s_padStateTemp, 17);
+
+		currentPos += bytesPerFrame;
+		newPos += 17;
+	}
+
+	delete[] newTmpInput;
+	newTmpInput = nullptr;
+
+	s_totalBytes = newTotalByteAmount;
+
+	//Save new DTM
+	SaveRecording(outputFile);
+}
 };

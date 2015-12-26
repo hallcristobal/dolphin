@@ -298,6 +298,7 @@ wxMenuBar* CFrame::CreateMenu()
 
 	wxMenu* zeldaMenu = new wxMenu;
 	zeldaMenu->Append(IDM_TPCOMPARE, "Create Video Comparison");
+	zeldaMenu->Append(IDM_ATTACHDTM, "Attach DTM");
 	zeldaMenu->Append(IDM_SCRIPTLAUNCH, "Execute Script");
 	zeldaMenu->AppendSeparator();
 	zeldaMenu->AppendSubMenu(tpMenu, "TP");
@@ -1743,6 +1744,10 @@ void CFrame::OnScriptLaunch(wxCommandEvent& WXUNUSED(event))
 {
 	g_ScriptLauncher->Show(true);
 	g_ScriptLauncher->Shown();
+}
+void CFrame::OnAttachDTM(wxCommandEvent& WXUNUSED(event))
+{
+	g_AttachDTM->Show(true);
 }
 
 void CFrame::OnExportAllSaves(wxCommandEvent& WXUNUSED (event))

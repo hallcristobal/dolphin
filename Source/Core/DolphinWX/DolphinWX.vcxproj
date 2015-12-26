@@ -100,6 +100,7 @@
     <ClCompile Include="NetWindow.cpp" />
     <ClCompile Include="PatchAddEdit.cpp" />
     <ClCompile Include="SoftwareVideoConfigDialog.cpp" />
+    <ClCompile Include="SpliceDTM.cpp" />
     <ClCompile Include="TASInputDlg.cpp" />
     <ClCompile Include="TPLoadManager.cpp" />
     <ClCompile Include="TPSavefileManager.cpp" />
@@ -154,6 +155,7 @@
     <ClInclude Include="NetWindow.h" />
     <ClInclude Include="PatchAddEdit.h" />
     <ClInclude Include="SoftwareVideoConfigDialog.h" />
+    <ClInclude Include="SpliceDTM.h" />
     <ClInclude Include="TASInputDlg.h" />
     <ClInclude Include="TPLoadManager.h" />
     <ClInclude Include="TPSavefileManager.h" />

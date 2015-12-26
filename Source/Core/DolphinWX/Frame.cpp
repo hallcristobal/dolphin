@@ -71,7 +71,8 @@
 #include "DolphinWX/TPLoadManager.h"
 #include "DolphinWX/TPVideoComparison.h"
 #include "DolphinWX/LaunchLuaScript.h"
-
+#include "DolphinWX/SpliceDTM.h"
+	
 // Resources
 
 extern "C" {
@@ -304,6 +305,7 @@ EVT_MENU(IDM_TPCOMPARE, CFrame::OnTPVideoComparison) //Dragonbane
 EVT_MENU(IDM_SUPERSWIM, CFrame::OnTWWSuperSwim) //Dragonbane
 EVT_MENU(IDM_TUNERINPUT, CFrame::OnTWWTunerInput) //Dragonbane
 EVT_MENU(IDM_SCRIPTLAUNCH, CFrame::OnScriptLaunch) //Dragonbane
+EVT_MENU(IDM_ATTACHDTM, CFrame::OnAttachDTM) //Dragonbane
 EVT_MENU(IDM_IMPORT_SAVE, CFrame::OnImportSave)
 EVT_MENU(IDM_EXPORT_ALL_SAVE, CFrame::OnExportAllSaves)
 EVT_MENU(IDM_CHEATS, CFrame::OnShow_CheatsWindow)
@@ -456,6 +458,7 @@ CFrame::CFrame(wxFrame* parent,
 	g_TWWSuperswim = new TWWSuperswim(this);
 	g_TWWTunerInput = new TWWTunerInput(this);
 	g_ScriptLauncher = new LuaWindow(this);
+	g_AttachDTM = new DTMSplicer(this);
 
 	
 
