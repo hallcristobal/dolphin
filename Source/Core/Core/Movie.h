@@ -194,7 +194,7 @@ u64 GetDTMComparisonLength(const std::string& movie);
 void RenderComparisonVideo(bool schedule);
 bool GetNextComparisonMovie(bool update);
 void CancelComparison();
-void AttachDTM(const std::string& dtmFile, u64 fromFrame, u64 toFrame, int bytesPerFrame, const std::string& outputFile);
+void AttachDTM(const std::string& dtmFile, u64 fromVisualFrame, u64 toVisualFrame, u64 fromInputFrame, u64 toInputFrame, int bytesPerFrame, const std::string& outputFile);
 
 bool IsConfigSaved();
 bool IsDualCore();

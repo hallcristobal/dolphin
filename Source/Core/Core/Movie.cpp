@@ -3317,7 +3317,7 @@ bool SaveMemCard()
 {
 	return saveMemCard;
 }
-void AttachDTM(const std::string& dtmFile, u64 fromFrame, u64 toFrame, int bytesPerFrame, const std::string& outputFile)
+void AttachDTM(const std::string& dtmFile, u64 fromVisualFrame, u64 toVisualFrame, u64 fromInputFrame, u64 toInputFrame, int bytesPerFrame, const std::string& outputFile)
 {
 	File::IOFile g_recordfd;
 	DTMHeader dtmHeader;
@@ -3337,20 +3337,30 @@ void AttachDTM(const std::string& dtmFile, u64 fromFrame, u64 toFrame, int bytes
 
 	g_recordfd.Close();
 
-	if (toFrame == 0)
+	if (toVisualFrame == 0)
+		toVisualFrame = dtmHeader.frameCount;
 
-		toFrame = dtmHeader.frameCount;
+	if (toInputFrame == 0)
+		toInputFrame = dtmHeader.inputCount;
 
-	if (toFrame > dtmHeader.frameCount || fromFrame > toFrame)
+	if (toVisualFrame > dtmHeader.frameCount || fromVisualFrame > toVisualFrame || toInputFrame > dtmHeader.inputCount|| fromInputFrame > toInputFrame)
 	{
 		PanicAlertT("Invalid frame numbers!");
 		return;
 	}
 
-	u64 amountVisualFrames = (toFrame - fromFrame) + 1;
-	int factor = dtmHeader.inputCount / dtmHeader.frameCount;
+	u64 amountVisualFrames = (toVisualFrame - fromVisualFrame); //+ 1; //Wont work for 60 FPS games I assume
+	u64 amountInputFrames = (toInputFrame - fromInputFrame);  //+ 2; //Wont work for 60 FPS games I assume
 
-	u64 amountInputFrames = amountVisualFrames * factor;
+
+	PanicAlertT("fromVisualFrame: %d | toVisualFrame: %d", fromVisualFrame, toVisualFrame);
+	PanicAlertT("fromInputFrame: %d | toInputFrame: %d", fromInputFrame, toInputFrame);
+
+	PanicAlertT("Current File: Total Frames: %d | Total Input Count: %d", g_totalFrames, g_totalInputCount);
+	PanicAlertT("Attached File: Total Frames: %d | Total Input Count: %d", dtmHeader.frameCount, dtmHeader.inputCount);
+
+	PanicAlertT("Visual Frames: %d | Input Frames: %d", amountVisualFrames, amountInputFrames);
+
 
 	//Set Values
 	g_totalFrames += amountVisualFrames;
@@ -3363,9 +3373,11 @@ void AttachDTM(const std::string& dtmFile, u64 fromFrame, u64 toFrame, int bytes
 
 	EnsureTmpInputSize(newTotalByteAmount);
 
+	PanicAlertT("Final File: Total Frames: %d | Total Input Count: %d | Old Filesize: %d | New Filesize: %d", g_totalFrames, g_totalInputCount, s_totalBytes, newTotalByteAmount);
+
 	//Copy Data Over
-	u64 start = (fromFrame * factor) * bytesPerFrame;
-	u64 end = ((toFrame + 1) * factor) * bytesPerFrame;
+	u64 start = fromInputFrame * bytesPerFrame;
+	u64 end = (toInputFrame * bytesPerFrame) - start;
 
 	u64 currentPos = 0;
 	u64 newPos = 0;

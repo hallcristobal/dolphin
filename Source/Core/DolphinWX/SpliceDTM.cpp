@@ -87,40 +87,60 @@ DTMSplicer::DTMSplicer(wxWindow* parent, wxWindowID id, const wxString& title, c
 	bSizer1->Add(m_DTMPath, 0, wxALL, 5);
 
 	//Text 2
-	m_staticText2 = new wxStaticText(this, wxID_ANY, wxT("From Frame:"), wxDefaultPosition, wxDefaultSize, 0);
+	m_staticText2 = new wxStaticText(this, wxID_ANY, wxT("From Visual Frame:"), wxDefaultPosition, wxDefaultSize, 0);
 	m_staticText2->Wrap(-1);
 	m_staticText2->SetFont(wxFont(12, 74, 90, 92, false, wxT("Arial")));
 	bSizer1->Add(m_staticText2, 0, wxALL, 5);
 
-	//Textbox From
-	fromFrame = new wxTextCtrl(this, wxID_ANY, "", wxDefaultPosition, wxDefaultSize, 0);
-	bSizer1->Add(fromFrame, 0, wxALL, 5);
+	//Textbox From Visual
+	fromVisualFrame = new wxTextCtrl(this, wxID_ANY, "", wxDefaultPosition, wxDefaultSize, 0);
+	bSizer1->Add(fromVisualFrame, 0, wxALL, 5);
 
 	//Text 3
-	m_staticText3 = new wxStaticText(this, wxID_ANY, wxT("Until Frame:"), wxDefaultPosition, wxDefaultSize, 0);
+	m_staticText3 = new wxStaticText(this, wxID_ANY, wxT("Until Visual Frame:"), wxDefaultPosition, wxDefaultSize, 0);
 	m_staticText3->Wrap(-1);
 	m_staticText3->SetFont(wxFont(12, 74, 90, 92, false, wxT("Arial")));
 	bSizer1->Add(m_staticText3, 0, wxALL, 5);
 
-	//Textbox To
-	toFrame = new wxTextCtrl(this, wxID_ANY, "", wxDefaultPosition, wxDefaultSize, 0);
-	bSizer1->Add(toFrame, 0, wxALL, 5);
+	//Textbox To Visual
+	toVisualFrame = new wxTextCtrl(this, wxID_ANY, "", wxDefaultPosition, wxDefaultSize, 0);
+	bSizer1->Add(toVisualFrame, 0, wxALL, 5);
 
 	//Text 4
-	m_staticText4 = new wxStaticText(this, wxID_ANY, wxT("Bytes per Input:"), wxDefaultPosition, wxDefaultSize, 0);
+	m_staticText4 = new wxStaticText(this, wxID_ANY, wxT("From Input Frame:"), wxDefaultPosition, wxDefaultSize, 0);
 	m_staticText4->Wrap(-1);
 	m_staticText4->SetFont(wxFont(12, 74, 90, 92, false, wxT("Arial")));
 	bSizer1->Add(m_staticText4, 0, wxALL, 5);
+
+	//Textbox From Input
+	fromInputFrame = new wxTextCtrl(this, wxID_ANY, "", wxDefaultPosition, wxDefaultSize, 0);
+	bSizer1->Add(fromInputFrame, 0, wxALL, 5);
+
+	//Text 5
+	m_staticText5 = new wxStaticText(this, wxID_ANY, wxT("Until Input Frame:"), wxDefaultPosition, wxDefaultSize, 0);
+	m_staticText5->Wrap(-1);
+	m_staticText5->SetFont(wxFont(12, 74, 90, 92, false, wxT("Arial")));
+	bSizer1->Add(m_staticText5, 0, wxALL, 5);
+
+	//Textbox To Input
+	toInputFrame = new wxTextCtrl(this, wxID_ANY, "", wxDefaultPosition, wxDefaultSize, 0);
+	bSizer1->Add(toInputFrame, 0, wxALL, 5);
+
+	//Text 6
+	m_staticText6 = new wxStaticText(this, wxID_ANY, wxT("Bytes per Input:"), wxDefaultPosition, wxDefaultSize, 0);
+	m_staticText6->Wrap(-1);
+	m_staticText6->SetFont(wxFont(12, 74, 90, 92, false, wxT("Arial")));
+	bSizer1->Add(m_staticText6, 0, wxALL, 5);
 
 	//Textbox Bytes per Input Frame
 	bytesPerFrame = new wxTextCtrl(this, wxID_ANY, "17", wxDefaultPosition, wxDefaultSize, 0);
 	bSizer1->Add(bytesPerFrame, 0, wxALL, 5);
 
-	//Text 5
-	m_staticText5 = new wxStaticText(this, wxID_ANY, wxT("Output Path:"), wxDefaultPosition, wxDefaultSize, 0);
-	m_staticText5->Wrap(-1);
-	m_staticText5->SetFont(wxFont(12, 74, 90, 92, false, wxT("Arial")));
-	bSizer1->Add(m_staticText5, 0, wxALL, 5);
+	//Text 7
+	m_staticText7 = new wxStaticText(this, wxID_ANY, wxT("Output Path:"), wxDefaultPosition, wxDefaultSize, 0);
+	m_staticText7->Wrap(-1);
+	m_staticText7->SetFont(wxFont(12, 74, 90, 92, false, wxT("Arial")));
+	bSizer1->Add(m_staticText7, 0, wxALL, 5);
 
 	//File Picker 2
 	m_savePath = new wxFilePickerCtrl(this, wxID_ANY,
@@ -216,23 +236,43 @@ void DTMSplicer::OnButtonPressed(wxCommandEvent& event)
 		}
 
 
-		std::string fromFrameStr = WxStrToStr(fromFrame->GetValue());
-		std::string toFrameStr = WxStrToStr(toFrame->GetValue());
+		std::string fromVisualFrameStr = WxStrToStr(fromVisualFrame->GetValue());
+		std::string toVisualFrameStr = WxStrToStr(toVisualFrame->GetValue());
+
+		std::string fromInputFrameStr = WxStrToStr(fromInputFrame->GetValue());
+		std::string toInputFrameStr = WxStrToStr(toInputFrame->GetValue());
+
 		std::string bytesPerFrameStr = WxStrToStr(bytesPerFrame->GetValue());
 
-		u64 fromFrameInt = 0;
-		u64 toFrameInt = 0;
+		u64 fromVisualFrameInt = 0;
+		u64 toVisualFrameInt = 0;
+
+		u64 fromInputFrameInt = 0;
+		u64 toInputFrameInt = 0;
+
 		int bytesPerFrameInt = 17;
 
-		if (!fromFrameStr.empty())
+		if (!fromVisualFrameStr.empty())
 		{
-			fromFrameInt = _strtoui64(fromFrameStr.c_str(), NULL, 10);
+			fromVisualFrameInt = _strtoui64(fromVisualFrameStr.c_str(), NULL, 10);
 		}
 
-		if (!toFrameStr.empty())
+		if (!toVisualFrameStr.empty())
 		{
-			toFrameInt = _strtoui64(toFrameStr.c_str(), NULL, 10);
+			toVisualFrameInt = _strtoui64(toVisualFrameStr.c_str(), NULL, 10);
 		}
+
+
+		if (!fromInputFrameStr.empty())
+		{
+			fromInputFrameInt = _strtoui64(fromInputFrameStr.c_str(), NULL, 10);
+		}
+
+		if (!toInputFrameStr.empty())
+		{
+			toInputFrameInt = _strtoui64(toInputFrameStr.c_str(), NULL, 10);
+		}
+
 
 		if (!bytesPerFrameStr.empty())
 		{
@@ -245,7 +285,7 @@ void DTMSplicer::OnButtonPressed(wxCommandEvent& event)
 			return;
 		}
 
-		Movie::AttachDTM(path1, fromFrameInt, toFrameInt, bytesPerFrameInt, path2);
+		Movie::AttachDTM(path1, fromVisualFrameInt, toVisualFrameInt, fromInputFrameInt, toInputFrameInt, bytesPerFrameInt, path2);
 
 		wxMessageBox("Process completed!");
 	}

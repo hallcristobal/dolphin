@@ -41,12 +41,16 @@ protected:
 	wxStaticText* m_staticText;
 	wxFilePickerCtrl *m_DTMPath;
 	wxStaticText* m_staticText2;
-	wxTextCtrl* fromFrame;
+	wxTextCtrl* fromVisualFrame;
 	wxStaticText* m_staticText3;
-	wxTextCtrl* toFrame;
+	wxTextCtrl* toVisualFrame;
 	wxStaticText* m_staticText4;
-	wxTextCtrl* bytesPerFrame;
+	wxTextCtrl* fromInputFrame;
 	wxStaticText* m_staticText5;
+	wxTextCtrl* toInputFrame;
+	wxStaticText* m_staticText6;
+	wxTextCtrl* bytesPerFrame;
+	wxStaticText* m_staticText7;
 	wxFilePickerCtrl *m_savePath;
 	wxButton* m_button_start;
 
