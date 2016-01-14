@@ -365,6 +365,14 @@ int GetFrameCount(lua_State *L)
 	return 1; // number of return values
 }
 
+int GetInputFrameCount(lua_State *L)
+{
+	int argc = lua_gettop(L);
+
+	lua_pushinteger(L, Movie::g_currentInputCount + 1); // return value
+	return 1; // number of return values
+}
+
 int MsgBox(lua_State *L)
 {
 	int argc = lua_gettop(L);
@@ -676,6 +684,7 @@ namespace Lua
 		lua_register(luaState, "LoadState", LoadState);
 
 		lua_register(luaState, "GetFrameCount", GetFrameCount);
+		lua_register(luaState, "GetInputFrameCount", GetInputFrameCount);
 		lua_register(luaState, "MsgBox", MsgBox);
 	}
 

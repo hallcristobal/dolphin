@@ -157,6 +157,7 @@ GCPadStatus CSIDevice_GCController::GetPadStatus()
 	else
 	{
 		Movie::CheckPadStatus(&PadStatus, ISIDevice::m_iDeviceNumber);
+		Movie::InputUpdate(); //Dragonbane: Safe to do for accurate input frame counter
 	}
 
 	return PadStatus;
