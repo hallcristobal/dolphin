@@ -597,6 +597,8 @@ int GetTicksToNextSIPoll()
 	}
 	if (NetPlay::IsNetPlayRunning())
 		return SystemTimers::GetTicksPerSecond() / VideoInterface::TargetRefreshRate / 2;
+	else //Dragonbane: This might be bad? But ensures consistent polling for Lua scripts
+		return SystemTimers::GetTicksPerSecond() / VideoInterface::TargetRefreshRate;
 
 	if (!g_Poll.Y && g_Poll.X)
 		return VideoInterface::GetTicksPerLine() * g_Poll.X;
