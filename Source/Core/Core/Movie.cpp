@@ -122,6 +122,7 @@ static ControllerState s_padState;
 static DTMHeader tmpHeader;
 static u8* tmpInput = nullptr;
 static size_t tmpInputAllocated = 0;
+
 static u64 s_currentByte = 0, s_totalBytes = 0;
 u64 g_currentFrame = 0, g_totalFrames = 0; // VI
 u64 g_currentLagCount = 0;
@@ -155,6 +156,7 @@ static std::string s_InputDisplay[8];
 
 static GCManipFunction gcmfunc = nullptr;
 static WiiManipFunction wiimfunc = nullptr;
+
 
 static void EnsureTmpInputSize(size_t bound)
 {
@@ -2123,12 +2125,12 @@ void PlayController(GCPadStatus* PadStatus, int controllerID)
 			if (!nowLoading)
 			{
 				if (!s_padState.loading)
-					PanicAlertT("RIP");
+					Core::DisplayMessage("Game is loading, movie is not supposed to yet. RIP", 2000);
 
 				if (s_padState.loading)
 				{
 					nowLoading = true;
-					lastLoadByte = s_currentByte - 16;
+					lastLoadByte = s_currentByte - 17;
 				}
 			}
 		}
@@ -2137,8 +2139,8 @@ void PlayController(GCPadStatus* PadStatus, int controllerID)
 			if (nowLoading)
 			{
 				nowLoading = false;
-				u64 saved = s_currentByte - 16;
-				u64 currDiff = ((s_currentByte - 16) - lastLoadByte) / 16;
+				u64 saved = s_currentByte - 17;
+				u64 currDiff = ((s_currentByte - 17) - lastLoadByte) / 17;
 
 				s_currentByte = lastLoadByte;
 
@@ -2146,13 +2148,13 @@ void PlayController(GCPadStatus* PadStatus, int controllerID)
 
 				while (movieLoading)
 				{
-					memcpy(&s_padState, &(tmpInput[s_currentByte]), 16);
-					s_currentByte += 16;
+					memcpy(&s_padState, &(tmpInput[s_currentByte]), 17);
+					s_currentByte += 17;
 
 					movieLoading = s_padState.loading;
 				}
 
-				u64 recDiff = ((s_currentByte - 16) - lastLoadByte) / 16;
+				u64 recDiff = ((s_currentByte - 17) - lastLoadByte) / 17;
 
 				if (currDiff > recDiff)
 				{
@@ -2219,20 +2221,17 @@ void PlayController(GCPadStatus* PadStatus, int controllerID)
 			waited = false;
 			
 
-
-
-
 		if (waitFrames > 0)
 		{
 			if (reverseWait)
 			{
-				s_currentByte -= 16;
+				s_currentByte -= 17;
 
-				s_currentByte += waitFrames*16;
+				s_currentByte += waitFrames*17;
 
-				memcpy(&s_padState, &(tmpInput[s_currentByte]), 16);
+				memcpy(&s_padState, &(tmpInput[s_currentByte]), 17);
 
-				s_currentByte += 16;
+				s_currentByte += 17;
 
 				g_currentFrame += waitFrames;
 				waitFrames = 0;
@@ -2242,13 +2241,15 @@ void PlayController(GCPadStatus* PadStatus, int controllerID)
 				g_currentFrame--;
 				waitFrames--;
 
-				s_currentByte -= 16;
+				s_currentByte -= 17;
 
-				memcpy(&s_padState, &(tmpInput[s_currentByte - 16]), 16);
+				memcpy(&s_padState, &(tmpInput[s_currentByte - 17]), 17);
 			}
 		}
+		//Legacy Load Time Code End
 		*/
 
+	
 		if (characterpointer > 0x80000000 && isLoading == 0)
 		{
 			characterpointer -= 0x80000000;
