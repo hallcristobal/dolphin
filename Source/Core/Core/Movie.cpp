@@ -33,6 +33,12 @@
 #include "InputCommon/GCPadStatus.h"
 #include "VideoCommon/VideoConfig.h"
 
+//Dragonbane: Get Object Size Stuff
+#include "DiscIO/Filesystem.h"
+#include "DiscIO/FileSystemGCWii.h"
+#include "DiscIO/Volume.h"
+#include "DiscIO/VolumeCreator.h"
+
 //Dragonbane
 #include "Core/Host.h"
 
@@ -250,13 +256,29 @@ std::string GetInputDisplay()
 
 				std::string currSectionOutput = subLine.substr(0, locNext);
 				subLine = subLine.substr(locNext + 1);
-				std::string currIdenti = subLine.substr(0, 3);
 
-				int numBytes = atoi(currIdenti.substr(1, 1).c_str());
+				int numBytes = 0;
+				std::string currIdenti = "";
+
+				if (subLine.substr(2, 1) == 'b')
+				{
+					currIdenti = subLine.substr(0, 3);
+
+					numBytes = atoi(currIdenti.substr(1, 1).c_str());
+
+					subLine = subLine.substr(3);
+				}
+				else
+				{
+					currIdenti = subLine.substr(0, 4);
+
+					numBytes = atoi(currIdenti.substr(1, 2).c_str());
+
+					subLine = subLine.substr(4);
+				}
+				
 				std::string identifier = "%" + currIdenti.substr(0, 1);
 				u32 readAddress;
-
-				subLine = subLine.substr(3);
 
 				std::string nextArgName = StringFromFormat("Arg%i", argCounter);
 
@@ -430,6 +452,139 @@ std::string GetInputDisplay()
 		}
 
 	}
+
+	//TWW Song Stone Debug
+
+	inputDisplay.append("\n");
+
+	u32 pointerBottom = Memory::Read_U32(0xAE562C);
+	pointerBottom -= 0x80000000;
+
+	u32 sizeBottom = Memory::Read_U32(pointerBottom + 0x4);
+	u32 sizeBottomKB = sizeBottom /= 1000;
+
+	std::string sizeButtomString = StringFromFormat("Max alloc possible: %d KB | ", sizeBottomKB);
+
+	inputDisplay.append(sizeButtomString);
+
+	/*
+	u32 currAddress = Memory::Read_U32(pointerBottom + 0x8);
+	u32 currResult = currAddress;
+
+	while (currResult > 0x0)
+	{
+		currResult -= 0x80000000;
+		currAddress = currResult;
+
+		currResult = Memory::Read_U32(currAddress + 0x8);
+	}
+
+	std::string sizeStringTop = StringFromFormat(" Top List: %X\n", currAddress);
+
+	inputDisplay.append(sizeStringTop);
+	*/
+
+
+	u32 pointerTop = Memory::Read_U32(0x497088);
+	pointerBottom -= 0x80000000;
+
+	u32 sizeTop = Memory::Read_U32(pointerTop + 0x4);
+
+	if (sizeTop == 0 || sizeTop < 0xFF)
+	{
+		u32 add = Memory::Read_U32(pointerTop + 0xC);
+		add -= 0x80000000;
+
+		sizeTop = Memory::Read_U32(add + 0x4);
+	}
+
+	u32 sizeTopKB = sizeTop /= 1000;
+
+	std::string sizeTopString = StringFromFormat(" Backup: %d KB", sizeTopKB);
+
+	inputDisplay.append(sizeTopString);
+
+	inputDisplay.append("\n");
+
+
+	int num = 0;
+
+	while (num < 60)
+	{
+		u8 var = Memory::Read_U8(0x3E51E0 + num);
+
+		if (var == 0x0D)
+			break;
+
+		++num;
+	}
+
+	std::string errText = Memory::Read_String(0x3E51E0, num);
+
+	inputDisplay.append(errText);
+
+	if (errText.find("mount error", 0) != std::string::npos)
+	{
+		std::string archiveName = errText.substr(errText.find("<", 0) + 1);
+
+		archiveName = archiveName.substr(0, archiveName.find(">", 0));
+
+		//Check size of object
+		std::string fullPath = StringFromFormat("res/Object/%s", archiveName.c_str());
+		std::string ISOPath = SConfig::GetInstance().m_LocalCoreStartupParameter.m_strFilename;
+
+		static DiscIO::IVolume *OpenISO = nullptr;
+		static DiscIO::IFileSystem *pFileSystem = nullptr;
+
+		OpenISO = DiscIO::CreateVolumeFromFilename(ISOPath);
+		pFileSystem = DiscIO::CreateFileSystem(OpenISO);
+
+		u64 fileSize = pFileSystem->GetFileSize(fullPath);
+
+		//Limit read size to 128 MB
+		size_t readSize = (size_t)std::min(fileSize, (u64)0x08000000);
+
+		std::vector<u8> inputBuffer(readSize);
+
+		pFileSystem->ReadFile(fullPath, &inputBuffer[0], readSize);
+
+		delete pFileSystem;
+		delete OpenISO;
+
+		std::string index = "";
+
+		for (int i = 0; i < 4; i++)
+		{
+			int address = i;
+			std::string result;
+
+			u8 var = inputBuffer[address];
+
+			result = var;
+
+			index.append(result);
+		}
+
+		u32 outputSize;
+
+		if (!index.compare("Yaz0"))
+		{
+			outputSize = (u32)((inputBuffer[4] << 24) | (inputBuffer[5] << 16) | (inputBuffer[6] << 8) | inputBuffer[7]);
+		}
+		else
+		{
+			outputSize = readSize;
+		}
+
+		outputSize /= 1000;
+
+		std::string sizeString = StringFromFormat(" (failed to allocate %d KB)", outputSize);
+
+		inputDisplay.append(sizeString);
+	}
+
+
+	inputDisplay.append("\n");
 
 	/*
 	u32 charPointerAddress;
