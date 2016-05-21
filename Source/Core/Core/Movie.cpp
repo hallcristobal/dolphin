@@ -458,55 +458,114 @@ std::string GetInputDisplay()
 	{
 		inputDisplay.append("\n");
 
+		//Bottom Main List
 		u32 pointerBottom = Memory::Read_U32(0xAE562C);
 		pointerBottom -= 0x80000000;
 
-		u32 sizeBottom = Memory::Read_U32(pointerBottom + 0x4);
-		u32 sizeBottomKB = sizeBottom /= 1000;
+		u32 freeSpaceBottomTotal = Memory::Read_U32(pointerBottom + 0x4);
+		u32 biggestSlotBottom = freeSpaceBottomTotal;
 
-		std::string sizeButtomString = StringFromFormat("Max alloc possible: %d KB | ", sizeBottomKB);
-
-		inputDisplay.append(sizeButtomString);
-
-		/*
 		u32 currAddress = Memory::Read_U32(pointerBottom + 0x8);
 		u32 currResult = currAddress;
+		u32 slotCountBottom = 1;
 
 		while (currResult > 0x0)
 		{
-		currResult -= 0x80000000;
-		currAddress = currResult;
+			++slotCountBottom;
 
-		currResult = Memory::Read_U32(currAddress + 0x8);
+			currResult -= 0x80000000;
+			currAddress = currResult;
+
+			u32 spaceSize = Memory::Read_U32(currAddress + 0x4);
+
+			if (spaceSize > 0)
+			{
+				freeSpaceBottomTotal += spaceSize;
+
+				if (spaceSize > biggestSlotBottom)
+					biggestSlotBottom = spaceSize;
+			}
+
+			currResult = Memory::Read_U32(currAddress + 0x8);
 		}
 
-		std::string sizeStringTop = StringFromFormat(" Top List: %X\n", currAddress);
+		freeSpaceBottomTotal /= 1000;
+		biggestSlotBottom /= 1000;
 
-		inputDisplay.append(sizeStringTop);
-		*/
+		std::string sizeButtomString = StringFromFormat("Normal max alloc: %d KB | Free total: %d KB | Nodes: %d\n", biggestSlotBottom, freeSpaceBottomTotal, slotCountBottom);
+
+		inputDisplay.append(sizeButtomString);
+
+		//std::string sizeTopString3 = StringFromFormat("Add1: %X\n", currAddress);
+		//inputDisplay.append(sizeTopString3);
 
 
+		//Top Backup List
+
+		/*
 		u32 pointerTop = Memory::Read_U32(0x497088);
-		pointerBottom -= 0x80000000;
+		pointerTop -= 0x80000000;
 
 		u32 sizeTop = Memory::Read_U32(pointerTop + 0x4);
 
 		if (sizeTop == 0 || sizeTop < 0xFF)
 		{
-			u32 add = Memory::Read_U32(pointerTop + 0xC);
-			add -= 0x80000000;
+		u32 add = Memory::Read_U32(pointerTop + 0xC);
+		add -= 0x80000000;
 
-			sizeTop = Memory::Read_U32(add + 0x4);
+		sizeTop = Memory::Read_U32(add + 0x4);
+		}
+		*/
+
+		u32 pointerTop = Memory::Read_U32(0x497088);
+		pointerTop -= 0x80000000;
+
+		u32 freeSpaceTopTotal = 0;
+		u32 biggestSlotTop = 0;
+		u32 slotCountTop = 1;
+
+		currResult = Memory::Read_U32(pointerTop + 0xC);
+		currAddress = currResult;
+
+		if (Memory::Read_U8(pointerTop + 0xC) >= 0x80)
+		{
+			++slotCountTop;
+
+			freeSpaceTopTotal = Memory::Read_U32(pointerTop + 0x4);
+			biggestSlotTop = freeSpaceTopTotal;
+
+			while (currResult > 0x0)
+			{
+				currResult -= 0x80000000;
+				currAddress = currResult;
+
+				if (Memory::Read_U8(currAddress + 0xC) < 0x80)
+					break;
+
+				currResult = Memory::Read_U32(currAddress + 0xC);
+
+				u32 spaceSize = Memory::Read_U32(currAddress + 0x4);
+
+				if (spaceSize > 0)
+				{
+					freeSpaceTopTotal += spaceSize;
+
+					if (spaceSize > biggestSlotTop)
+						biggestSlotTop = spaceSize;
+				}
+			}
 		}
 
-		u32 sizeTopKB = sizeTop /= 1000;
+		freeSpaceTopTotal /= 1000;
+		biggestSlotTop /= 1000;
 
-		std::string sizeTopString = StringFromFormat(" Backup: %d KB", sizeTopKB);
-
+		std::string sizeTopString = StringFromFormat("Backup max alloc: %d KB | Free total: %d KB | Nodes: %d\n", biggestSlotTop, freeSpaceTopTotal, slotCountTop);
 		inputDisplay.append(sizeTopString);
 
-		inputDisplay.append("\n");
+		//std::string sizeTopString2 = StringFromFormat("Add2: %X\n", currAddress);
+		//inputDisplay.append(sizeTopString2);
 
+		//Error text
 		int num = 0;
 		while (num < 60)
 		{
@@ -519,6 +578,19 @@ std::string GetInputDisplay()
 		}
 
 		std::string errText = Memory::Read_String(0x3E51E0, num);
+
+		inputDisplay.append("[LOG] ");
+
+		if (errText.find("mmDoDvdThd_mountArchive_c::execute", 0) != std::string::npos)
+		{
+			errText = "Alloc error for object!";
+
+			if (Memory::Read_U8(0x3BD3A2) == 0x0) //Event State = 0
+			{
+				Memory::Write_String("Backup space was used successfully to recover!", 0x3E51E0);
+				Memory::Write_U8(0x0D, 0x3E520E);
+			}
+		}
 
 		inputDisplay.append(errText);
 
@@ -584,6 +656,7 @@ std::string GetInputDisplay()
 
 		inputDisplay.append("\n");
 	}
+
 
 	/*
 	u32 charPointerAddress;
