@@ -458,6 +458,77 @@ std::string GetInputDisplay()
 	{
 		inputDisplay.append("\n");
 
+		//Top Backup List
+
+		/*
+		u32 pointerTop = Memory::Read_U32(0x497088);
+		pointerTop -= 0x80000000;
+
+		u32 sizeTop = Memory::Read_U32(pointerTop + 0x4);
+
+		if (sizeTop == 0 || sizeTop < 0xFF)
+		{
+		u32 add = Memory::Read_U32(pointerTop + 0xC);
+		add -= 0x80000000;
+
+		sizeTop = Memory::Read_U32(add + 0x4);
+		}
+		*/
+
+		u32 pointerTop = Memory::Read_U32(0x497088);
+		pointerTop -= 0x80000000;
+
+		u32 freeSpaceTopTotal = 0;
+		u32 biggestSlotTop = 0;
+		u32 slotCountTop = 1;
+
+		u32 currResult = Memory::Read_U32(pointerTop + 0xC);
+		u32 currAddress = currResult;
+
+		if (Memory::Read_U8(pointerTop + 0xC) >= 0x80)
+		{
+			freeSpaceTopTotal = Memory::Read_U32(pointerTop + 0x4);
+			biggestSlotTop = freeSpaceTopTotal;
+
+			while (currResult > 0x0)
+			{
+				++slotCountTop;
+
+				currResult -= 0x80000000;
+				currAddress = currResult;
+
+				if (Memory::Read_U8(currAddress + 0xC) < 0x80 && Memory::Read_U8(currAddress + 0xC) > 0x0)
+					break;
+
+				currResult = Memory::Read_U32(currAddress + 0xC);
+
+				u32 spaceSize = Memory::Read_U32(currAddress + 0x4);
+
+				if (spaceSize > 0)
+				{
+					freeSpaceTopTotal += spaceSize;
+
+					if (spaceSize > biggestSlotTop)
+						biggestSlotTop = spaceSize;
+				}
+			}
+		}
+		else if (Memory::Read_U8(pointerTop + 0xC) == 0x0)
+		{
+			freeSpaceTopTotal = Memory::Read_U32(pointerTop + 0x4);
+			biggestSlotTop = freeSpaceTopTotal;
+		}
+
+		freeSpaceTopTotal /= 1000;
+		biggestSlotTop /= 1000;
+
+		std::string sizeTopString = StringFromFormat("[DYN] Max alloc: %d KB | Free total: %d KB | Nodes: %d\n", biggestSlotTop, freeSpaceTopTotal, slotCountTop);
+		inputDisplay.append(sizeTopString);
+
+		//std::string sizeTopString2 = StringFromFormat("Add1: %X\n", currAddress);
+		//inputDisplay.append(sizeTopString2);
+
+
 		//Bottom Main List
 		u32 pointerBottom = Memory::Read_U32(0xAE562C);
 		pointerBottom -= 0x80000000;
@@ -465,8 +536,8 @@ std::string GetInputDisplay()
 		u32 freeSpaceBottomTotal = Memory::Read_U32(pointerBottom + 0x4);
 		u32 biggestSlotBottom = freeSpaceBottomTotal;
 
-		u32 currAddress = Memory::Read_U32(pointerBottom + 0x8);
-		u32 currResult = currAddress;
+		currAddress = Memory::Read_U32(pointerBottom + 0x8);
+		currResult = currAddress;
 		u32 slotCountBottom = 1;
 
 		while (currResult > 0x0)
@@ -492,78 +563,13 @@ std::string GetInputDisplay()
 		freeSpaceBottomTotal /= 1000;
 		biggestSlotBottom /= 1000;
 
-		std::string sizeButtomString = StringFromFormat("Normal max alloc: %d KB | Free total: %d KB | Nodes: %d\n", biggestSlotBottom, freeSpaceBottomTotal, slotCountBottom);
+		std::string sizeButtomString = StringFromFormat("[ACT] Max alloc: %d KB | Free total: %d KB | Nodes: %d\n", biggestSlotBottom, freeSpaceBottomTotal, slotCountBottom);
 
 		inputDisplay.append(sizeButtomString);
 
-		//std::string sizeTopString3 = StringFromFormat("Add1: %X\n", currAddress);
+		//std::string sizeTopString3 = StringFromFormat("Add2: %X\n", currAddress);
 		//inputDisplay.append(sizeTopString3);
 
-
-		//Top Backup List
-
-		/*
-		u32 pointerTop = Memory::Read_U32(0x497088);
-		pointerTop -= 0x80000000;
-
-		u32 sizeTop = Memory::Read_U32(pointerTop + 0x4);
-
-		if (sizeTop == 0 || sizeTop < 0xFF)
-		{
-		u32 add = Memory::Read_U32(pointerTop + 0xC);
-		add -= 0x80000000;
-
-		sizeTop = Memory::Read_U32(add + 0x4);
-		}
-		*/
-
-		u32 pointerTop = Memory::Read_U32(0x497088);
-		pointerTop -= 0x80000000;
-
-		u32 freeSpaceTopTotal = 0;
-		u32 biggestSlotTop = 0;
-		u32 slotCountTop = 1;
-
-		currResult = Memory::Read_U32(pointerTop + 0xC);
-		currAddress = currResult;
-
-		if (Memory::Read_U8(pointerTop + 0xC) >= 0x80)
-		{
-			++slotCountTop;
-
-			freeSpaceTopTotal = Memory::Read_U32(pointerTop + 0x4);
-			biggestSlotTop = freeSpaceTopTotal;
-
-			while (currResult > 0x0)
-			{
-				currResult -= 0x80000000;
-				currAddress = currResult;
-
-				if (Memory::Read_U8(currAddress + 0xC) < 0x80)
-					break;
-
-				currResult = Memory::Read_U32(currAddress + 0xC);
-
-				u32 spaceSize = Memory::Read_U32(currAddress + 0x4);
-
-				if (spaceSize > 0)
-				{
-					freeSpaceTopTotal += spaceSize;
-
-					if (spaceSize > biggestSlotTop)
-						biggestSlotTop = spaceSize;
-				}
-			}
-		}
-
-		freeSpaceTopTotal /= 1000;
-		biggestSlotTop /= 1000;
-
-		std::string sizeTopString = StringFromFormat("Backup max alloc: %d KB | Free total: %d KB | Nodes: %d\n", biggestSlotTop, freeSpaceTopTotal, slotCountTop);
-		inputDisplay.append(sizeTopString);
-
-		//std::string sizeTopString2 = StringFromFormat("Add2: %X\n", currAddress);
-		//inputDisplay.append(sizeTopString2);
 
 		//Error text
 		int num = 0;
@@ -587,8 +593,8 @@ std::string GetInputDisplay()
 
 			if (Memory::Read_U8(0x3BD3A2) == 0x0) //Event State = 0
 			{
-				Memory::Write_String("Backup space was used successfully to recover!", 0x3E51E0);
-				Memory::Write_U8(0x0D, 0x3E520E);
+				Memory::Write_String("Dynamic space was used successfully to recover!", 0x3E51E0);
+				Memory::Write_U8(0x0D, 0x3E520F);
 			}
 		}
 
