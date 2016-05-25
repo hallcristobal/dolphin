@@ -42,10 +42,366 @@
 //Dragonbane
 #include "Core/Host.h"
 
+//Dragonbane: For new Pipe
+#include <strsafe.h>
+
 // The chunk to allocate movie data in multiples of.
 #define DTM_BASE_LENGTH (1024)
 
 static std::mutex cs_frameSkip;
+
+
+//Dragonbane: New Message Pipe to visualize the Actor Memory Space
+static std::thread connectionVBThread;
+namespace { Common::Flag server_running; }
+
+#define CONNECTING_STATE 0 
+#define READING_STATE 1 
+#define WRITING_STATE 2 
+#define PIPE_TIMEOUT 5000
+#define BUFSIZE 4096
+
+typedef struct
+{
+	OVERLAPPED oOverlap;
+	HANDLE hPipeInst;
+	u8* chRequest;
+	DWORD cbRead;
+	u8* chReply;
+	DWORD cbToWrite;
+	DWORD dwState;
+	BOOL fPendingIO;
+} PIPEINST, *LPPIPEINST;
+
+HANDLE hEvent;
+PIPEINST Pipe;
+
+VOID DisconnectAndReconnect();
+BOOL ConnectToNewClient(HANDLE, LPOVERLAPPED);
+VOID GetAnswerToRequest(LPPIPEINST);
+
+static void ActorMemoryTransferServerThread()
+{
+	server_running.Set();
+
+	Common::SetCurrentThreadName("Memory Transfer Server");
+
+	wchar_t* lpszPipename = new wchar_t[255];
+	MultiByteToWideChar(CP_ACP, 0, "\\\\.\\pipe\\DolphinMemoryTransfer", -1, lpszPipename, 255);
+
+	DWORD dwWait, cbRet, dwErr;
+	BOOL fSuccess;
+
+	// Create an event object for this instance. 
+	hEvent = CreateEvent(
+		NULL,    // default security attribute 
+		TRUE,    // manual-reset event 
+		TRUE,    // initial state = signaled 
+		NULL);   // unnamed event object 
+
+	if (hEvent == NULL)
+	{
+		PanicAlertT("Couldnt create event for the pipe");
+		return;
+	}
+
+	Pipe.oOverlap.hEvent = hEvent;
+
+	Pipe.hPipeInst = CreateNamedPipe(
+		lpszPipename,					// pipe name 
+		PIPE_ACCESS_DUPLEX |			// read/write access for both client/server
+		FILE_FLAG_FIRST_PIPE_INSTANCE | // only one instance allowed
+		FILE_FLAG_OVERLAPPED,			// handle calls async
+		PIPE_TYPE_MESSAGE |				// message type pipe 
+		PIPE_READMODE_MESSAGE |			// message-read mode 
+		PIPE_WAIT,						// blocking mode 
+		1,								// max. instances  
+		BUFSIZE,						// output buffer size 
+		BUFSIZE,						// input buffer size 
+		PIPE_TIMEOUT,					// client time-out 
+		NULL);							// default security attribute 
+
+	if (Pipe.hPipeInst == INVALID_HANDLE_VALUE)
+	{
+		PanicAlertT("Invalid handle, couldnt create server pipe");
+		CloseHandle(hEvent);
+		return;
+	}
+
+	u8* newTmpRequest = new u8[BUFSIZE];
+	u8* newTmpWrite = new u8[BUFSIZE];
+	
+	Pipe.chRequest = newTmpRequest;
+	Pipe.chReply = newTmpWrite;
+
+	//Connect to the new client
+	Pipe.fPendingIO = ConnectToNewClient(Pipe.hPipeInst, &Pipe.oOverlap);
+
+	if (Pipe.fPendingIO == 0)
+	{
+		DisconnectNamedPipe(Pipe.hPipeInst);
+		CloseHandle(Pipe.hPipeInst);
+		CloseHandle(hEvent);
+		return;
+	}
+
+	Pipe.dwState = Pipe.fPendingIO ?
+	CONNECTING_STATE : // still connecting
+	READING_STATE;     // ready to read
+
+
+	while (server_running.IsSet())
+	{
+		// Wait for the event object to be signaled, indicating 
+		// completion of an overlapped read, write, or 
+		// connect operation. 
+
+		dwWait = WaitForSingleObject(
+			hEvent,   // event object  
+			1000);    // waits 1 second for response
+
+		if (dwWait == 0x00000102L) //still waiting
+			continue;
+
+		//Get the result if the operation was pending
+		if (Pipe.fPendingIO)
+		{
+			fSuccess = GetOverlappedResult(
+				Pipe.hPipeInst,    // handle to pipe 
+				&Pipe.oOverlap,    // OVERLAPPED structure 
+				&cbRet,            // bytes transferred 
+				FALSE);            // do not wait 
+
+			switch (Pipe.dwState)
+			{
+				// Pending connect operation 
+				case CONNECTING_STATE:
+				if (!fSuccess)
+				{
+					PanicAlertT("Error during connection process: %d", GetLastError());
+					DisconnectNamedPipe(Pipe.hPipeInst);
+					CloseHandle(Pipe.hPipeInst);
+					CloseHandle(hEvent);
+					return;
+				}
+
+				Pipe.dwState = READING_STATE;
+				break;
+
+				//Pending read operation 
+				case READING_STATE:
+				if (!fSuccess || cbRet == 0)
+				{
+					DisconnectAndReconnect();
+					continue;
+				}
+
+				Pipe.cbRead = cbRet;
+				Pipe.dwState = WRITING_STATE;
+				break;
+
+				//Pending write operation 
+				case WRITING_STATE:
+				if (!fSuccess || cbRet != Pipe.cbToWrite)
+				{
+					DisconnectAndReconnect();
+					continue;
+				}
+
+				Pipe.dwState = READING_STATE;
+				break;
+
+				default:
+				{
+					PanicAlertT("Invalid pipe state!");
+					DisconnectNamedPipe(Pipe.hPipeInst);
+					CloseHandle(Pipe.hPipeInst);
+					CloseHandle(hEvent);
+					return;
+				}
+			}
+		}
+
+		//The pipe state determines which operation to do next
+		switch (Pipe.dwState)
+		{
+			// READING_STATE: 
+			// The pipe instance is connected to the client 
+			// and is ready to read a request from the client
+
+			case READING_STATE:
+
+			fSuccess = ReadFile(
+				Pipe.hPipeInst,
+				Pipe.chRequest,
+				BUFSIZE,
+				&Pipe.cbRead,
+				&Pipe.oOverlap);
+
+			// The read operation completed successfully
+			if (fSuccess && Pipe.cbRead != 0)
+			{
+				Pipe.fPendingIO = FALSE;
+				Pipe.dwState = WRITING_STATE;
+				continue;
+			}
+
+			// The read operation is still pending 
+			dwErr = GetLastError();
+			if (!fSuccess && (dwErr == ERROR_IO_PENDING))
+			{
+				Pipe.fPendingIO = TRUE;
+				continue;
+			}
+
+			//An error occurred; disconnect from the client
+			DisconnectAndReconnect();
+			break;
+
+
+			// WRITING_STATE: 
+			// The request was successfully read from the client
+			// Get the reply data and write it to the client
+
+			case WRITING_STATE:
+			GetAnswerToRequest(&Pipe);
+
+			fSuccess = WriteFile(
+				Pipe.hPipeInst,
+				Pipe.chReply,
+				Pipe.cbToWrite,
+				&cbRet,
+				&Pipe.oOverlap);
+
+			//The write operation completed successfully 
+
+			if (fSuccess && cbRet == Pipe.cbToWrite)
+			{
+				Pipe.fPendingIO = FALSE;
+				Pipe.dwState = READING_STATE;
+				continue;
+			}
+
+			//The write operation is still pending 
+
+			dwErr = GetLastError();
+			if (!fSuccess && (dwErr == ERROR_IO_PENDING))
+			{
+				Pipe.fPendingIO = TRUE;
+				continue;
+			}
+
+			//An error occurred; disconnect from the client 
+
+			DisconnectAndReconnect();
+			break;
+
+			default:
+			{
+				PanicAlertT("Invalid pipe state!");
+				DisconnectNamedPipe(Pipe.hPipeInst);
+				CloseHandle(Pipe.hPipeInst);
+				CloseHandle(hEvent);
+			}
+		}
+
+		Common::SleepCurrentThread(1);
+	}
+
+	//Disconnect the pipe instance and flush
+	FlushFileBuffers(Pipe.hPipeInst);
+
+	if (!DisconnectNamedPipe(Pipe.hPipeInst))
+	{
+		PanicAlertT("DisconnectNamedPipe failed with: %d", GetLastError());
+	}
+
+	CloseHandle(Pipe.hPipeInst);
+	CloseHandle(hEvent);
+}
+
+
+// DisconnectAndReconnect() 
+// This function is called when an error occurs or when the client 
+// closes its handle to the pipe. Disconnect from this client, then 
+// call ConnectNamedPipe to wait for next attempt to connect 
+
+VOID DisconnectAndReconnect()
+{
+	//Disconnect the pipe instance
+	if (!DisconnectNamedPipe(Pipe.hPipeInst))
+	{
+		PanicAlertT("DisconnectNamedPipe failed with: %d", GetLastError());
+	}
+
+	//Connect to the new client
+	Pipe.fPendingIO = ConnectToNewClient(Pipe.hPipeInst, &Pipe.oOverlap);
+
+	Pipe.dwState = Pipe.fPendingIO ?
+	CONNECTING_STATE : // still connecting 
+    READING_STATE;     // ready to read 
+}
+
+// ConnectToNewClient(HANDLE, LPOVERLAPPED) 
+// This function is called to start an overlapped connect operation. 
+// It returns TRUE if an operation is pending or FALSE if the 
+// connection has been completed
+
+BOOL ConnectToNewClient(HANDLE hPipe, LPOVERLAPPED lpo)
+{
+	BOOL fConnected, fPendingIO = FALSE;
+
+	lpo->Offset = 0;
+	lpo->OffsetHigh = 0;
+
+	//Start an overlapped connection for this pipe instance
+	fConnected = ConnectNamedPipe(hPipe, lpo);
+
+	//Overlapped ConnectNamedPipe should return zero
+	if (fConnected)
+	{
+		PanicAlertT("ConnectNamedPipe failed with: %d", GetLastError());
+		return 0;
+	}
+
+	switch (GetLastError())
+	{
+		//The overlapped connection in progress
+		case ERROR_IO_PENDING:
+		fPendingIO = TRUE;
+		break;
+
+		//Client is already connected, so signal an event
+		case ERROR_PIPE_CONNECTED:
+		if (SetEvent(lpo->hEvent))
+			break;
+
+		//If an error occurs during the connect operation
+		default:
+		{
+			PanicAlertT("ConnectNamedPipe failed with: %d", GetLastError());
+			return 0;
+		}
+	}
+
+	return fPendingIO;
+}
+
+VOID GetAnswerToRequest(LPPIPEINST pipe)
+{
+	std::string request(reinterpret_cast<char const*>(pipe->chRequest), Pipe.cbRead);
+
+	std::string requestString = StringFromFormat("External App says: %s", request.c_str());
+	Core::DisplayMessage(requestString, 9000);
+
+	pipe->chReply[0] = 0x44;
+	pipe->chReply[1] = 0x61;
+	pipe->chReply[2] = 0x6e;
+	pipe->chReply[3] = 0x67;
+	pipe->cbToWrite = 4;
+}
+
+
 
 namespace Movie {
 
@@ -1008,6 +1364,10 @@ void Init()
 
 		cmp_curentBranchFrame = 0; //Dragonbane
 	}
+
+	//Dragonbane: Create Actor Memory Transfer Server
+	if (!connectionVBThread.joinable())
+		connectionVBThread = std::thread(ActorMemoryTransferServerThread);
 }
 
 void InputUpdate()
@@ -2997,6 +3357,12 @@ void Shutdown()
 	//tmpDynamicRange = nullptr;
 	badSettings = false;
 	isVerifying = false;
+
+
+	//Dragonbane: Kill Actor Memory Transfer Server
+	server_running.Clear();
+	if (connectionVBThread.joinable())
+		connectionVBThread.join();
 }
 
 bool VerifyRecording(const std::string& moviename, const std::string& statename, bool fromStart)
