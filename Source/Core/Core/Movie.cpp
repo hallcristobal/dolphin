@@ -536,7 +536,10 @@ static u8 s_numGBAs; //Dragonbane
 
 static u8 s_numPads = 0;
 static ControllerState s_padState;
+static ControllerState_Version2 s_padState_Version2;
+static ControllerState_Version1 s_padState_Version1;
 static DTMHeader tmpHeader;
+static DTMHeader_Version12 tmpHeader_Version12;
 static u8* tmpInput = nullptr;
 static size_t tmpInputAllocated = 0;
 
@@ -1385,10 +1388,22 @@ void Init()
 		ReadHeader();
 		std::thread md5thread(CheckMD5);
 		md5thread.detach();
-		if (strncmp((char *)tmpHeader.gameID, SConfig::GetInstance().m_LocalCoreStartupParameter.GetUniqueID().c_str(), 6))
+
+		if (State::ZE_VERSION > 2)
 		{
-			PanicAlertT("The recorded game (%s) is not the same as the selected game (%s)", tmpHeader.gameID, SConfig::GetInstance().m_LocalCoreStartupParameter.GetUniqueID().c_str());
-			EndPlayInput(false);
+			if (strncmp((char *)tmpHeader.gameID, SConfig::GetInstance().m_LocalCoreStartupParameter.GetUniqueID().c_str(), 6))
+			{
+				PanicAlertT("The recorded game (%s) is not the same as the selected game (%s)", tmpHeader.gameID, SConfig::GetInstance().m_LocalCoreStartupParameter.GetUniqueID().c_str());
+				EndPlayInput(false);
+			}
+		}
+		else
+		{
+			if (strncmp((char *)tmpHeader_Version12.gameID, SConfig::GetInstance().m_LocalCoreStartupParameter.GetUniqueID().c_str(), 6))
+			{
+				PanicAlertT("The recorded game (%s) is not the same as the selected game (%s)", tmpHeader_Version12.gameID, SConfig::GetInstance().m_LocalCoreStartupParameter.GetUniqueID().c_str());
+				EndPlayInput(false);
+			}
 		}
 	}
 
@@ -1401,9 +1416,30 @@ void Init()
 	}
 
 	s_frameSkipCounter = s_framesToSkip;
-	memset(&s_padState, 0, sizeof(s_padState));
-	if (!tmpHeader.bFromSaveState || !IsPlayingInput())
-		Core::SetStateFileName("");
+
+	if (State::ZE_VERSION > 2)
+	{
+		memset(&s_padState, 0, sizeof(s_padState));
+	}
+	else if (State::ZE_VERSION > 1)
+	{
+		memset(&s_padState_Version2, 0, sizeof(s_padState_Version2));
+	}
+	else if (State::ZE_VERSION == 1)
+	{
+		memset(&s_padState_Version1, 0, sizeof(s_padState_Version1));
+	}
+
+	if (State::ZE_VERSION > 2)
+	{
+		if (!tmpHeader.bFromSaveState || !IsPlayingInput())
+			Core::SetStateFileName("");
+	}
+	else
+	{
+		if (!tmpHeader_Version12.bFromSaveState || !IsPlayingInput())
+			Core::SetStateFileName("");
+	}
 
 	for (auto& disp : s_InputDisplay)
 		disp.clear();
@@ -1966,42 +2002,6 @@ static void SetWiiInputDisplayString(int remoteID, u8* const data, const Wiimote
 
 void CheckPadStatus(GCPadStatus* PadStatus, int controllerID)
 {
-	s_padState.A         = ((PadStatus->button & PAD_BUTTON_A) != 0);
-	s_padState.B         = ((PadStatus->button & PAD_BUTTON_B) != 0);
-	s_padState.X         = ((PadStatus->button & PAD_BUTTON_X) != 0);
-	s_padState.Y         = ((PadStatus->button & PAD_BUTTON_Y) != 0);
-	s_padState.Z         = ((PadStatus->button & PAD_TRIGGER_Z) != 0);
-	s_padState.Start     = ((PadStatus->button & PAD_BUTTON_START) != 0);
-
-	s_padState.DPadUp    = ((PadStatus->button & PAD_BUTTON_UP) != 0);
-	s_padState.DPadDown  = ((PadStatus->button & PAD_BUTTON_DOWN) != 0);
-	s_padState.DPadLeft  = ((PadStatus->button & PAD_BUTTON_LEFT) != 0);
-	s_padState.DPadRight = ((PadStatus->button & PAD_BUTTON_RIGHT) != 0);
-
-	s_padState.L         = ((PadStatus->button & PAD_TRIGGER_L) != 0);
-	s_padState.R         = ((PadStatus->button & PAD_TRIGGER_R) != 0);
-	s_padState.TriggerL  = PadStatus->triggerLeft;
-	s_padState.TriggerR  = PadStatus->triggerRight;
-
-	s_padState.AnalogStickX = PadStatus->stickX;
-	s_padState.AnalogStickY = PadStatus->stickY;
-
-	s_padState.CStickX   = PadStatus->substickX;
-	s_padState.CStickY   = PadStatus->substickY;
-
-	s_padState.disc = g_bDiscChange;
-	g_bDiscChange = false;
-	s_padState.reset = g_bReset;
-	g_bReset = false;
-
-	//Dragonbane: Record Tuner Events
-	s_padState.tunerEvent = tunerActionID;
-
-	if (tunerActionID > 0 )
-		tunerExecuteID = tunerActionID;
-
-	tunerActionID = 0;
-
 	//Dragonbane
 	std::string gameID = SConfig::GetInstance().m_LocalCoreStartupParameter.GetUniqueID();
 	u32 isLoadingAdd;
@@ -2024,27 +2024,6 @@ void CheckPadStatus(GCPadStatus* PadStatus, int controllerID)
 		isTP = true;
 	}
 
-	//TP Stuff
-	if (isTP)
-	{
-		u32 characterpointer = Memory::Read_U32(charPointerAddress);
-		u32 isLoading = Memory::Read_U32(isLoadingAdd);
-
-		if (isLoading > 0)
-			s_padState.loading = true;
-		else
-			s_padState.loading = false;
-
-		if (characterpointer > 0x80000000 && isLoading == 0)
-		{
-			characterpointer -= 0x80000000;
-
-			s_padState.LinkX = Memory::Read_F32(characterpointer);
-			s_padState.LinkZ = Memory::Read_F32(characterpointer + 0x8);
-		}
-	}
-
-
 	//TWW Stuff
 	bool isTWW = false;
 
@@ -2053,25 +2032,6 @@ void CheckPadStatus(GCPadStatus* PadStatus, int controllerID)
 		isLoadingAdd = 0x3ad335;
 
 		isTWW = true;
-	}
-
-	if (isTWW)
-	{
-		u8 isLoading = Memory::Read_U8(isLoadingAdd);
-
-		if (isLoading > 0)
-			s_padState.loading = true;
-		else
-			s_padState.loading = false;
-
-		if (isLoading == 0)
-		{
-			u32 XAdd = 0x3d78fc;
-			u32 ZAdd = 0x3d7904;
-			
-			s_padState.LinkX = Memory::Read_F32(XAdd);
-			s_padState.LinkZ = Memory::Read_F32(ZAdd);
-		}
 	}
 
 	//FSA Stuff
@@ -2085,26 +2045,222 @@ void CheckPadStatus(GCPadStatus* PadStatus, int controllerID)
 		isFSA = true;
 	}
 
-	if (isFSA)
+	if (State::ZE_VERSION > 2)
 	{
-		u32 characterpointer = Memory::Read_U32(charPointerAddress);
-		u32 isLoading = Memory::Read_U32(isLoadingAdd);
+		s_padState.A = ((PadStatus->button & PAD_BUTTON_A) != 0);
+		s_padState.B = ((PadStatus->button & PAD_BUTTON_B) != 0);
+		s_padState.X = ((PadStatus->button & PAD_BUTTON_X) != 0);
+		s_padState.Y = ((PadStatus->button & PAD_BUTTON_Y) != 0);
+		s_padState.Z = ((PadStatus->button & PAD_TRIGGER_Z) != 0);
+		s_padState.Start = ((PadStatus->button & PAD_BUTTON_START) != 0);
 
-		if (isLoading > 0)
-			s_padState.loading = true;
-		else
-			s_padState.loading = false;
+		s_padState.DPadUp = ((PadStatus->button & PAD_BUTTON_UP) != 0);
+		s_padState.DPadDown = ((PadStatus->button & PAD_BUTTON_DOWN) != 0);
+		s_padState.DPadLeft = ((PadStatus->button & PAD_BUTTON_LEFT) != 0);
+		s_padState.DPadRight = ((PadStatus->button & PAD_BUTTON_RIGHT) != 0);
 
-		if (characterpointer > 0x80000000 && isLoading == 0)
+		s_padState.L = ((PadStatus->button & PAD_TRIGGER_L) != 0);
+		s_padState.R = ((PadStatus->button & PAD_TRIGGER_R) != 0);
+		s_padState.TriggerL = PadStatus->triggerLeft;
+		s_padState.TriggerR = PadStatus->triggerRight;
+
+		s_padState.AnalogStickX = PadStatus->stickX;
+		s_padState.AnalogStickY = PadStatus->stickY;
+
+		s_padState.CStickX = PadStatus->substickX;
+		s_padState.CStickY = PadStatus->substickY;
+
+		s_padState.disc = g_bDiscChange;
+		g_bDiscChange = false;
+		s_padState.reset = g_bReset;
+		g_bReset = false;
+
+		//Dragonbane: Record Tuner Events
+		s_padState.tunerEvent = tunerActionID;
+
+		if (tunerActionID > 0)
+			tunerExecuteID = tunerActionID;
+
+		tunerActionID = 0;
+
+		//TP Stuff
+		if (isTP)
 		{
-			characterpointer -= 0x80000000;
+			u32 characterpointer = Memory::Read_U32(charPointerAddress);
+			u32 isLoading = Memory::Read_U32(isLoadingAdd);
 
-			s_padState.LinkX = Memory::Read_F32(characterpointer + 0x8C);
-			s_padState.LinkZ = Memory::Read_F32(characterpointer + 0x90);
+			if (isLoading > 0)
+				s_padState.loading = true;
+			else
+				s_padState.loading = false;
+
+			if (characterpointer > 0x80000000 && isLoading == 0)
+			{
+				characterpointer -= 0x80000000;
+
+				s_padState.LinkX = Memory::Read_F32(characterpointer);
+				s_padState.LinkZ = Memory::Read_F32(characterpointer + 0x8);
+			}
+		}
+
+		if (isTWW)
+		{
+			u8 isLoading = Memory::Read_U8(isLoadingAdd);
+
+			if (isLoading > 0)
+				s_padState.loading = true;
+			else
+				s_padState.loading = false;
+
+			if (isLoading == 0)
+			{
+				u32 XAdd = 0x3d78fc;
+				u32 ZAdd = 0x3d7904;
+
+				s_padState.LinkX = Memory::Read_F32(XAdd);
+				s_padState.LinkZ = Memory::Read_F32(ZAdd);
+			}
+		}
+
+		if (isFSA)
+		{
+			u32 characterpointer = Memory::Read_U32(charPointerAddress);
+			u32 isLoading = Memory::Read_U32(isLoadingAdd);
+
+			if (isLoading > 0)
+				s_padState.loading = true;
+			else
+				s_padState.loading = false;
+
+			if (characterpointer > 0x80000000 && isLoading == 0)
+			{
+				characterpointer -= 0x80000000;
+
+				s_padState.LinkX = Memory::Read_F32(characterpointer + 0x8C);
+				s_padState.LinkZ = Memory::Read_F32(characterpointer + 0x90);
+			}
+		}
+
+		SetInputDisplayString(s_padState, controllerID);
+	}
+	else if (State::ZE_VERSION > 1)
+	{
+		s_padState_Version2.A = ((PadStatus->button & PAD_BUTTON_A) != 0);
+		s_padState_Version2.B = ((PadStatus->button & PAD_BUTTON_B) != 0);
+		s_padState_Version2.X = ((PadStatus->button & PAD_BUTTON_X) != 0);
+		s_padState_Version2.Y = ((PadStatus->button & PAD_BUTTON_Y) != 0);
+		s_padState_Version2.Z = ((PadStatus->button & PAD_TRIGGER_Z) != 0);
+		s_padState_Version2.Start = ((PadStatus->button & PAD_BUTTON_START) != 0);
+
+		s_padState_Version2.DPadUp = ((PadStatus->button & PAD_BUTTON_UP) != 0);
+		s_padState_Version2.DPadDown = ((PadStatus->button & PAD_BUTTON_DOWN) != 0);
+		s_padState_Version2.DPadLeft = ((PadStatus->button & PAD_BUTTON_LEFT) != 0);
+		s_padState_Version2.DPadRight = ((PadStatus->button & PAD_BUTTON_RIGHT) != 0);
+
+		s_padState_Version2.L = ((PadStatus->button & PAD_TRIGGER_L) != 0);
+		s_padState_Version2.R = ((PadStatus->button & PAD_TRIGGER_R) != 0);
+		s_padState_Version2.TriggerL = PadStatus->triggerLeft;
+		s_padState_Version2.TriggerR = PadStatus->triggerRight;
+
+		s_padState_Version2.AnalogStickX = PadStatus->stickX;
+		s_padState_Version2.AnalogStickY = PadStatus->stickY;
+
+		s_padState_Version2.CStickX = PadStatus->substickX;
+		s_padState_Version2.CStickY = PadStatus->substickY;
+
+		s_padState_Version2.disc = g_bDiscChange;
+		g_bDiscChange = false;
+		s_padState_Version2.reset = g_bReset;
+		g_bReset = false;
+
+		//TP Stuff
+		if (isTP)
+		{
+			u32 characterpointer = Memory::Read_U32(charPointerAddress);
+			u32 isLoading = Memory::Read_U32(isLoadingAdd);
+
+			if (isLoading > 0)
+				s_padState_Version2.loading = true;
+			else
+				s_padState_Version2.loading = false;
+
+			if (characterpointer > 0x80000000 && isLoading == 0)
+			{
+				characterpointer -= 0x80000000;
+
+				s_padState_Version2.LinkX = Memory::Read_F32(characterpointer);
+				s_padState_Version2.LinkZ = Memory::Read_F32(characterpointer + 0x8);
+			}
+		}
+
+		if (isTWW)
+		{
+			u8 isLoading = Memory::Read_U8(isLoadingAdd);
+
+			if (isLoading > 0)
+				s_padState_Version2.loading = true;
+			else
+				s_padState_Version2.loading = false;
+
+			if (isLoading == 0)
+			{
+				u32 XAdd = 0x3d78fc;
+				u32 ZAdd = 0x3d7904;
+
+				s_padState_Version2.LinkX = Memory::Read_F32(XAdd);
+				s_padState_Version2.LinkZ = Memory::Read_F32(ZAdd);
+			}
+		}
+
+		if (isFSA)
+		{
+			u32 characterpointer = Memory::Read_U32(charPointerAddress);
+			u32 isLoading = Memory::Read_U32(isLoadingAdd);
+
+			if (isLoading > 0)
+				s_padState_Version2.loading = true;
+			else
+				s_padState_Version2.loading = false;
+
+			if (characterpointer > 0x80000000 && isLoading == 0)
+			{
+				characterpointer -= 0x80000000;
+
+				s_padState_Version2.LinkX = Memory::Read_F32(characterpointer + 0x8C);
+				s_padState_Version2.LinkZ = Memory::Read_F32(characterpointer + 0x90);
+			}
 		}
 	}
+	else if (State::ZE_VERSION == 1)
+	{
+		s_padState_Version1.A = ((PadStatus->button & PAD_BUTTON_A) != 0);
+		s_padState_Version1.B = ((PadStatus->button & PAD_BUTTON_B) != 0);
+		s_padState_Version1.X = ((PadStatus->button & PAD_BUTTON_X) != 0);
+		s_padState_Version1.Y = ((PadStatus->button & PAD_BUTTON_Y) != 0);
+		s_padState_Version1.Z = ((PadStatus->button & PAD_TRIGGER_Z) != 0);
+		s_padState_Version1.Start = ((PadStatus->button & PAD_BUTTON_START) != 0);
 
-	SetInputDisplayString(s_padState, controllerID);
+		s_padState_Version1.DPadUp = ((PadStatus->button & PAD_BUTTON_UP) != 0);
+		s_padState_Version1.DPadDown = ((PadStatus->button & PAD_BUTTON_DOWN) != 0);
+		s_padState_Version1.DPadLeft = ((PadStatus->button & PAD_BUTTON_LEFT) != 0);
+		s_padState_Version1.DPadRight = ((PadStatus->button & PAD_BUTTON_RIGHT) != 0);
+
+		s_padState_Version1.L = ((PadStatus->button & PAD_TRIGGER_L) != 0);
+		s_padState_Version1.R = ((PadStatus->button & PAD_TRIGGER_R) != 0);
+		s_padState_Version1.TriggerL = PadStatus->triggerLeft;
+		s_padState_Version1.TriggerR = PadStatus->triggerRight;
+
+		s_padState_Version1.AnalogStickX = PadStatus->stickX;
+		s_padState_Version1.AnalogStickY = PadStatus->stickY;
+
+		s_padState_Version1.CStickX = PadStatus->substickX;
+		s_padState_Version1.CStickY = PadStatus->substickY;
+
+		s_padState_Version1.disc = g_bDiscChange;
+		g_bDiscChange = false;
+		s_padState_Version1.reset = g_bReset;
+		g_bReset = false;
+	}
 }
 
 void RecordInput(GCPadStatus* PadStatus, int controllerID)
@@ -2226,13 +2382,30 @@ void RecordInput(GCPadStatus* PadStatus, int controllerID)
 	*/
 
 	//if (!updatedMemory)
-	//{
+	//{}
+
+	if (State::ZE_VERSION > 2)
+	{
 		EnsureTmpInputSize((size_t)(s_currentByte + 17)); //Dragonbane: 17
 		memcpy(&(tmpInput[s_currentByte]), &s_padState, 17);
 
 		//memset(&(tmpInput[s_currentByte+16]), 0, 4);
 		s_currentByte += 17;
-	//}
+	}
+	else if (State::ZE_VERSION > 1)
+	{
+		EnsureTmpInputSize((size_t)(s_currentByte + 16));
+		memcpy(&(tmpInput[s_currentByte]), &s_padState_Version2, 16);
+
+		s_currentByte += 16;
+	}
+	else if (State::ZE_VERSION == 1)
+	{
+		EnsureTmpInputSize((size_t)(s_currentByte + 8));
+		memcpy(&(tmpInput[s_currentByte]), &s_padState_Version1, 8);
+
+		s_currentByte += 8;
+	}
 
 	s_totalBytes = s_currentByte;
 }
@@ -2260,39 +2433,77 @@ void RecordWiimote(int wiimote, u8 *data, u8 size)
 
 void ReadHeader()
 {
-	s_numPads = tmpHeader.numControllers;
-	s_recordingStartTime = tmpHeader.recordingStartTime;
-	if (s_rerecords < tmpHeader.numRerecords)
-		s_rerecords = tmpHeader.numRerecords;
-
-	if (tmpHeader.bSaveConfig)
+	if (State::ZE_VERSION > 2)
 	{
-		s_bSaveConfig = true;
-		s_bSkipIdle = tmpHeader.bSkipIdle;
-		s_bDualCore = tmpHeader.bDualCore;
-		s_bProgressive = tmpHeader.bProgressive;
-		s_bDSPHLE = tmpHeader.bDSPHLE;
-		s_bFastDiscSpeed = tmpHeader.bFastDiscSpeed;
-		s_iCPUCore = tmpHeader.CPUCore;
-		g_bClearSave = tmpHeader.bClearSave;
-		s_memcards = tmpHeader.memcards;
-		s_bongos = tmpHeader.bongos;
-		s_numGBAs = tmpHeader.numGBAs; //Dragonbane
-		s_bSyncGPU = tmpHeader.bSyncGPU;
-		s_bNetPlay = tmpHeader.bNetPlay;
-		memcpy(s_revision, tmpHeader.revision, ArraySize(s_revision));
+		s_numPads = tmpHeader.numControllers;
+		s_recordingStartTime = tmpHeader.recordingStartTime;
+		if (s_rerecords < tmpHeader.numRerecords)
+			s_rerecords = tmpHeader.numRerecords;
+
+		if (tmpHeader.bSaveConfig)
+		{
+			s_bSaveConfig = true;
+			s_bSkipIdle = tmpHeader.bSkipIdle;
+			s_bDualCore = tmpHeader.bDualCore;
+			s_bProgressive = tmpHeader.bProgressive;
+			s_bDSPHLE = tmpHeader.bDSPHLE;
+			s_bFastDiscSpeed = tmpHeader.bFastDiscSpeed;
+			s_iCPUCore = tmpHeader.CPUCore;
+			g_bClearSave = tmpHeader.bClearSave;
+			s_memcards = tmpHeader.memcards;
+			s_bongos = tmpHeader.bongos;
+			s_numGBAs = tmpHeader.numGBAs; //Dragonbane
+			s_bSyncGPU = tmpHeader.bSyncGPU;
+			s_bNetPlay = tmpHeader.bNetPlay;
+			memcpy(s_revision, tmpHeader.revision, ArraySize(s_revision));
+		}
+		else
+		{
+			GetSettings();
+		}
+
+		s_videoBackend = (char*)tmpHeader.videoBackend;
+		g_discChange = (char*)tmpHeader.discChange;
+		s_author = (char*)tmpHeader.author;
+		memcpy(s_MD5, tmpHeader.md5, 16);
+		s_DSPiromHash = tmpHeader.DSPiromHash;
+		s_DSPcoefHash = tmpHeader.DSPcoefHash;
 	}
 	else
 	{
-		GetSettings();
-	}
+		s_numPads = tmpHeader_Version12.numControllers;
+		s_recordingStartTime = tmpHeader_Version12.recordingStartTime;
+		if (s_rerecords < tmpHeader_Version12.numRerecords)
+			s_rerecords = tmpHeader_Version12.numRerecords;
 
-	s_videoBackend = (char*) tmpHeader.videoBackend;
-	g_discChange = (char*) tmpHeader.discChange;
-	s_author = (char*) tmpHeader.author;
-	memcpy(s_MD5, tmpHeader.md5, 16);
-	s_DSPiromHash = tmpHeader.DSPiromHash;
-	s_DSPcoefHash = tmpHeader.DSPcoefHash;
+		if (tmpHeader_Version12.bSaveConfig)
+		{
+			s_bSaveConfig = true;
+			s_bSkipIdle = tmpHeader_Version12.bSkipIdle;
+			s_bDualCore = tmpHeader_Version12.bDualCore;
+			s_bProgressive = tmpHeader_Version12.bProgressive;
+			s_bDSPHLE = tmpHeader_Version12.bDSPHLE;
+			s_bFastDiscSpeed = tmpHeader_Version12.bFastDiscSpeed;
+			s_iCPUCore = tmpHeader_Version12.CPUCore;
+			g_bClearSave = tmpHeader_Version12.bClearSave;
+			s_memcards = tmpHeader_Version12.memcards;
+			s_bongos = tmpHeader_Version12.bongos;
+			s_bSyncGPU = tmpHeader_Version12.bSyncGPU;
+			s_bNetPlay = tmpHeader_Version12.bNetPlay;
+			memcpy(s_revision, tmpHeader_Version12.revision, ArraySize(s_revision));
+		}
+		else
+		{
+			GetSettings();
+		}
+
+		s_videoBackend = (char*)tmpHeader_Version12.videoBackend;
+		g_discChange = (char*)tmpHeader_Version12.discChange;
+		s_author = (char*)tmpHeader_Version12.author;
+		memcpy(s_MD5, tmpHeader_Version12.md5, 16);
+		s_DSPiromHash = tmpHeader_Version12.DSPiromHash;
+		s_DSPcoefHash = tmpHeader_Version12.DSPcoefHash;
+	}
 }
 
 bool PlayInput(const std::string& filename)
@@ -2308,49 +2519,100 @@ bool PlayInput(const std::string& filename)
 	if (!g_recordfd.Open(filename, "rb"))
 		return false;
 
-	g_recordfd.ReadArray(&tmpHeader, 1);
 
-	if (!IsMovieHeader(tmpHeader.filetype))
+	if (State::ZE_VERSION > 2)
 	{
-		PanicAlertT("Invalid recording file");
+		g_recordfd.ReadArray(&tmpHeader, 1);
+
+		if (!IsMovieHeader(tmpHeader.filetype))
+		{
+			PanicAlertT("Invalid recording file");
+			g_recordfd.Close();
+			return false;
+		}
+
+		ReadHeader();
+		g_totalFrames = tmpHeader.frameCount;
+		s_totalLagCount = tmpHeader.lagCount;
+		g_totalInputCount = tmpHeader.inputCount;
+		s_totalTickCount = tmpHeader.tickCount;
+
+		g_currentFrame = 0;
+		g_currentLagCount = 0;
+		g_currentInputCount = 0;
+
+		s_playMode = MODE_PLAYING;
+
+		isVerifying = false; //Dragonbane
+		isAutoVerifying = false;
+		justStoppedRecording = false;
+		tunerActionID = 0;
+		tunerExecuteID = 0;
+
+		Core::UpdateWantDeterminism();
+
+		s_totalBytes = g_recordfd.GetSize() - 256;
+		EnsureTmpInputSize((size_t)s_totalBytes);
+		g_recordfd.ReadArray(tmpInput, (size_t)s_totalBytes);
+		s_currentByte = 0;
 		g_recordfd.Close();
-		return false;
+
+		// Load savestate (and skip to frame data)
+		if (tmpHeader.bFromSaveState)
+		{
+			const std::string stateFilename = filename + ".sav";
+			if (File::Exists(stateFilename))
+				Core::SetStateFileName(stateFilename);
+			s_bRecordingFromSaveState = true;
+			Movie::LoadInput(filename);
+		}
 	}
-
-	ReadHeader();
-	g_totalFrames = tmpHeader.frameCount;
-	s_totalLagCount = tmpHeader.lagCount;
-	g_totalInputCount = tmpHeader.inputCount;
-	s_totalTickCount = tmpHeader.tickCount;
-
-	g_currentFrame = 0;
-	g_currentLagCount = 0;
-	g_currentInputCount = 0;
-
-	s_playMode = MODE_PLAYING;
-
-	isVerifying = false; //Dragonbane
-	isAutoVerifying = false;
-	justStoppedRecording = false;
-	tunerActionID = 0;
-	tunerExecuteID = 0;
-
-	Core::UpdateWantDeterminism();
-
-	s_totalBytes = g_recordfd.GetSize() - 256;
-	EnsureTmpInputSize((size_t)s_totalBytes);
-	g_recordfd.ReadArray(tmpInput, (size_t)s_totalBytes);
-	s_currentByte = 0;
-	g_recordfd.Close();
-
-	// Load savestate (and skip to frame data)
-	if (tmpHeader.bFromSaveState)
+	else
 	{
-		const std::string stateFilename = filename + ".sav";
-		if (File::Exists(stateFilename))
-			Core::SetStateFileName(stateFilename);
-		s_bRecordingFromSaveState = true;
-		Movie::LoadInput(filename);
+		g_recordfd.ReadArray(&tmpHeader_Version12, 1);
+
+		if (!IsMovieHeader(tmpHeader_Version12.filetype))
+		{
+			PanicAlertT("Invalid recording file");
+			g_recordfd.Close();
+			return false;
+		}
+
+		ReadHeader();
+		g_totalFrames = tmpHeader_Version12.frameCount;
+		s_totalLagCount = tmpHeader_Version12.lagCount;
+		g_totalInputCount = tmpHeader_Version12.inputCount;
+		s_totalTickCount = tmpHeader_Version12.tickCount;
+
+		g_currentFrame = 0;
+		g_currentLagCount = 0;
+		g_currentInputCount = 0;
+
+		s_playMode = MODE_PLAYING;
+
+		isVerifying = false; //Dragonbane
+		isAutoVerifying = false;
+		justStoppedRecording = false;
+		tunerActionID = 0;
+		tunerExecuteID = 0;
+
+		Core::UpdateWantDeterminism();
+
+		s_totalBytes = g_recordfd.GetSize() - 256;
+		EnsureTmpInputSize((size_t)s_totalBytes);
+		g_recordfd.ReadArray(tmpInput, (size_t)s_totalBytes);
+		s_currentByte = 0;
+		g_recordfd.Close();
+
+		// Load savestate (and skip to frame data)
+		if (tmpHeader_Version12.bFromSaveState)
+		{
+			const std::string stateFilename = filename + ".sav";
+			if (File::Exists(stateFilename))
+				Core::SetStateFileName(stateFilename);
+			s_bRecordingFromSaveState = true;
+			Movie::LoadInput(filename);
+		}
 	}
 
 	//Make sure Auto Roll is off for playback/verification
@@ -2399,25 +2661,33 @@ void DoState(PointerWrap &p)
 	p.Do(s_tickCountAtLastInput);
 	// other variables (such as s_totalBytes and g_totalFrames) are set in LoadInput
 
-	//Dragonbane: Save Roll Stuff
-	p.Do(roll_enabled);
-	p.Do(first_roll);
-	p.Do(roll_timer);
-
-	if (roll_enabled)
-	{ 
-		checkSave = true;
-		uncheckSave = false;
-	}
-	else
+	if (!p.GetMode() == PointerWrap::MODE_READ || State::ZE_VERSION > 1)
 	{
-		uncheckSave = true;
-		checkSave = false;
+		//Dragonbane: Save Roll Stuff
+		p.Do(roll_enabled);
+		p.Do(first_roll);
+		p.Do(roll_timer);
+
+		if (roll_enabled)
+		{
+			checkSave = true;
+			uncheckSave = false;
+		}
+		else
+		{
+			uncheckSave = true;
+			checkSave = false;
+		}
 	}
 
-	//Dragonbane: Tuner Stuff
-	p.Do(tunerExecuteID); //Save current Tuner Action ID
-	p.Do(tunerStatus); //Save Tuner Status for Display
+	if (!p.GetMode() == PointerWrap::MODE_READ || State::ZE_VERSION > 2)
+	{
+		//Dragonbane: Tuner Stuff
+		p.Do(tunerExecuteID); //Save current Tuner Action ID
+		p.Do(tunerStatus); //Save Tuner Status for Display
+	}
+
+
 }
 
 void LoadInput(const std::string& filename)
@@ -2434,145 +2704,314 @@ void LoadInput(const std::string& filename)
 		return;
 	}
 
-	t_record.ReadArray(&tmpHeader, 1);
-
-	if (!IsMovieHeader(tmpHeader.filetype))
+	if (State::ZE_VERSION > 2)
 	{
-		PanicAlertT("Savestate movie %s is corrupted, movie recording stopping...", filename.c_str());
-		EndPlayInput(false);
-		return;
-	}
-	ReadHeader();
-	if (!s_bReadOnly)
-	{
-		s_rerecords++;
-		tmpHeader.numRerecords = s_rerecords;
-		t_record.Seek(0, SEEK_SET);
-		t_record.WriteArray(&tmpHeader, 1);
-	}
+		t_record.ReadArray(&tmpHeader, 1);
 
-	ChangePads(true);
-	if (SConfig::GetInstance().m_LocalCoreStartupParameter.bWii)
-		ChangeWiiPads(true);
-
-	u64 totalSavedBytes = t_record.GetSize() - 256;
-
-	bool afterEnd = false;
-	// This can only happen if the user manually deletes data from the dtm.
-	if (s_currentByte > totalSavedBytes)
-	{
-		PanicAlertT("Warning: You loaded a save whose movie ends before the current frame in the save (byte %u < %u) (frame %u < %u). You should load another save before continuing.", (u32)totalSavedBytes+256, (u32)s_currentByte+256, (u32)tmpHeader.frameCount, (u32)g_currentFrame);
-		afterEnd = true;
-		Host_Message(WM_USER_STOP);
-	}
-
-	if (!s_bReadOnly || tmpInput == nullptr)
-	{
-		g_totalFrames = tmpHeader.frameCount;
-		s_totalLagCount = tmpHeader.lagCount;
-		g_totalInputCount = tmpHeader.inputCount;
-		s_totalTickCount = s_tickCountAtLastInput = tmpHeader.tickCount;
-		s_bRecordingFromSaveState = tmpHeader.bFromSaveState; //Dragonbane
-
-		if (s_bRecordingFromSaveState && lastMovie.compare(filename))
+		if (!IsMovieHeader(tmpHeader.filetype))
 		{
-			std::string stateFilename = filename + ".sav";
-
-			if (File::Exists(tmpStateFilename))
-				File::Delete(tmpStateFilename);
-
-			File::Copy(stateFilename, tmpStateFilename);
-
-			lastMovie = filename;
+			PanicAlertT("Savestate movie %s is corrupted, movie recording stopping...", filename.c_str());
+			EndPlayInput(false);
+			return;
 		}
-		
-		EnsureTmpInputSize((size_t)totalSavedBytes);
-		s_totalBytes = totalSavedBytes;
-		t_record.ReadArray(tmpInput, (size_t)s_totalBytes);
-	}
-	else if (s_currentByte > 0)
-	{
+		ReadHeader();
+		if (!s_bReadOnly)
+		{
+			s_rerecords++;
+			tmpHeader.numRerecords = s_rerecords;
+			t_record.Seek(0, SEEK_SET);
+			t_record.WriteArray(&tmpHeader, 1);
+		}
+
+		ChangePads(true);
+		if (SConfig::GetInstance().m_LocalCoreStartupParameter.bWii)
+			ChangeWiiPads(true);
+
+		u64 totalSavedBytes = t_record.GetSize() - 256;
+
+		bool afterEnd = false;
+		// This can only happen if the user manually deletes data from the dtm.
 		if (s_currentByte > totalSavedBytes)
 		{
-		}
-		else if (s_currentByte > s_totalBytes)
-		{
+			PanicAlertT("Warning: You loaded a save whose movie ends before the current frame in the save (byte %u < %u) (frame %u < %u). You should load another save before continuing.", (u32)totalSavedBytes + 256, (u32)s_currentByte + 256, (u32)tmpHeader.frameCount, (u32)g_currentFrame);
 			afterEnd = true;
-			PanicAlertT("Warning: You loaded a save that's after the end of the current movie. (byte %u > %u) (frame %u > %u). You should load another save before continuing, or load this state with read-only mode off.", (u32)s_currentByte+256, (u32)s_totalBytes+256, (u32)g_currentFrame, (u32)g_totalFrames);
+			Host_Message(WM_USER_STOP);
 		}
-		else if (s_currentByte > 0 && s_totalBytes > 0)
-		{
-			// verify identical from movie start to the save's current frame
-			u32 len = (u32)s_currentByte;
-			u8* movInput = new u8[len];
-			t_record.ReadArray(movInput, (size_t)len);
-			for (u32 i = 0; i < len; ++i)
-			{
-				if (movInput[i] != tmpInput[i])
-				{
-					// this is a "you did something wrong" alert for the user's benefit.
-					// we'll try to say what's going on in excruciating detail, otherwise the user might not believe us.
-					if (IsUsingWiimote(0))
-					{
-						// TODO: more detail
-						PanicAlertT("Warning: You loaded a save whose movie mismatches on byte %d (0x%X). You should load another save before continuing, or load this state with read-only mode off. Otherwise you'll probably get a desync.", i+256, i+256);
-						memcpy(tmpInput, movInput, s_currentByte);
-					}
-					else
-					{
-						int frame = i / 17; //Dragonbane: 17
-						ControllerState curPadState;
-						memcpy(&curPadState, &(tmpInput[frame * 17]), 17);
-						ControllerState movPadState;
-						memcpy(&movPadState, &(movInput[frame * 17]), 17);
-						PanicAlertT("Warning: You loaded a save whose movie mismatches on frame %d. You should load another save before continuing, or load this state with read-only mode off. Otherwise you'll probably get a desync.\n\n"
-							"More information: The current movie is %d frames long and the savestate's movie is %d frames long.\n\n"
-							"On frame %d, the current movie presses:\n"
-							"Start=%d, A=%d, B=%d, X=%d, Y=%d, Z=%d, DUp=%d, DDown=%d, DLeft=%d, DRight=%d, L=%d, R=%d, LT=%d, RT=%d, AnalogX=%d, AnalogY=%d, CX=%d, CY=%d"
-							"\n\n"
-							"On frame %d, the savestate's movie presses:\n"
-							"Start=%d, A=%d, B=%d, X=%d, Y=%d, Z=%d, DUp=%d, DDown=%d, DLeft=%d, DRight=%d, L=%d, R=%d, LT=%d, RT=%d, AnalogX=%d, AnalogY=%d, CX=%d, CY=%d",
-							(int)frame,
-							(int)g_totalFrames, (int)tmpHeader.frameCount,
-							(int)frame,
-							(int)curPadState.Start, (int)curPadState.A, (int)curPadState.B, (int)curPadState.X, (int)curPadState.Y, (int)curPadState.Z, (int)curPadState.DPadUp, (int)curPadState.DPadDown, (int)curPadState.DPadLeft, (int)curPadState.DPadRight, (int)curPadState.L, (int)curPadState.R, (int)curPadState.TriggerL, (int)curPadState.TriggerR, (int)curPadState.AnalogStickX, (int)curPadState.AnalogStickY, (int)curPadState.CStickX, (int)curPadState.CStickY,
-							(int)frame,
-							(int)movPadState.Start, (int)movPadState.A, (int)movPadState.B, (int)movPadState.X, (int)movPadState.Y, (int)movPadState.Z, (int)movPadState.DPadUp, (int)movPadState.DPadDown, (int)movPadState.DPadLeft, (int)movPadState.DPadRight, (int)movPadState.L, (int)movPadState.R, (int)movPadState.TriggerL, (int)movPadState.TriggerR, (int)movPadState.AnalogStickX, (int)movPadState.AnalogStickY, (int)movPadState.CStickX, (int)movPadState.CStickY);
 
+		if (!s_bReadOnly || tmpInput == nullptr)
+		{
+			g_totalFrames = tmpHeader.frameCount;
+			s_totalLagCount = tmpHeader.lagCount;
+			g_totalInputCount = tmpHeader.inputCount;
+			s_totalTickCount = s_tickCountAtLastInput = tmpHeader.tickCount;
+			s_bRecordingFromSaveState = tmpHeader.bFromSaveState; //Dragonbane
+
+			if (s_bRecordingFromSaveState && lastMovie.compare(filename))
+			{
+				std::string stateFilename = filename + ".sav";
+
+				if (File::Exists(tmpStateFilename))
+					File::Delete(tmpStateFilename);
+
+				File::Copy(stateFilename, tmpStateFilename);
+
+				lastMovie = filename;
+			}
+
+			EnsureTmpInputSize((size_t)totalSavedBytes);
+			s_totalBytes = totalSavedBytes;
+			t_record.ReadArray(tmpInput, (size_t)s_totalBytes);
+		}
+		else if (s_currentByte > 0)
+		{
+			if (s_currentByte > totalSavedBytes)
+			{
+			}
+			else if (s_currentByte > s_totalBytes)
+			{
+				afterEnd = true;
+				PanicAlertT("Warning: You loaded a save that's after the end of the current movie. (byte %u > %u) (frame %u > %u). You should load another save before continuing, or load this state with read-only mode off.", (u32)s_currentByte + 256, (u32)s_totalBytes + 256, (u32)g_currentFrame, (u32)g_totalFrames);
+			}
+			else if (s_currentByte > 0 && s_totalBytes > 0)
+			{
+				// verify identical from movie start to the save's current frame
+				u32 len = (u32)s_currentByte;
+				u8* movInput = new u8[len];
+				t_record.ReadArray(movInput, (size_t)len);
+				for (u32 i = 0; i < len; ++i)
+				{
+					if (movInput[i] != tmpInput[i])
+					{
+						// this is a "you did something wrong" alert for the user's benefit.
+						// we'll try to say what's going on in excruciating detail, otherwise the user might not believe us.
+						if (IsUsingWiimote(0))
+						{
+							// TODO: more detail
+							PanicAlertT("Warning: You loaded a save whose movie mismatches on byte %d (0x%X). You should load another save before continuing, or load this state with read-only mode off. Otherwise you'll probably get a desync.", i + 256, i + 256);
+							memcpy(tmpInput, movInput, s_currentByte);
+						}
+						else
+						{
+							int frame = i / 17; //Dragonbane: 17
+							ControllerState curPadState;
+							memcpy(&curPadState, &(tmpInput[frame * 17]), 17);
+							ControllerState movPadState;
+							memcpy(&movPadState, &(movInput[frame * 17]), 17);
+							PanicAlertT("Warning: You loaded a save whose movie mismatches on frame %d. You should load another save before continuing, or load this state with read-only mode off. Otherwise you'll probably get a desync.\n\n"
+								"More information: The current movie is %d frames long and the savestate's movie is %d frames long.\n\n"
+								"On frame %d, the current movie presses:\n"
+								"Start=%d, A=%d, B=%d, X=%d, Y=%d, Z=%d, DUp=%d, DDown=%d, DLeft=%d, DRight=%d, L=%d, R=%d, LT=%d, RT=%d, AnalogX=%d, AnalogY=%d, CX=%d, CY=%d"
+								"\n\n"
+								"On frame %d, the savestate's movie presses:\n"
+								"Start=%d, A=%d, B=%d, X=%d, Y=%d, Z=%d, DUp=%d, DDown=%d, DLeft=%d, DRight=%d, L=%d, R=%d, LT=%d, RT=%d, AnalogX=%d, AnalogY=%d, CX=%d, CY=%d",
+								(int)frame,
+								(int)g_totalFrames, (int)tmpHeader.frameCount,
+								(int)frame,
+								(int)curPadState.Start, (int)curPadState.A, (int)curPadState.B, (int)curPadState.X, (int)curPadState.Y, (int)curPadState.Z, (int)curPadState.DPadUp, (int)curPadState.DPadDown, (int)curPadState.DPadLeft, (int)curPadState.DPadRight, (int)curPadState.L, (int)curPadState.R, (int)curPadState.TriggerL, (int)curPadState.TriggerR, (int)curPadState.AnalogStickX, (int)curPadState.AnalogStickY, (int)curPadState.CStickX, (int)curPadState.CStickY,
+								(int)frame,
+								(int)movPadState.Start, (int)movPadState.A, (int)movPadState.B, (int)movPadState.X, (int)movPadState.Y, (int)movPadState.Z, (int)movPadState.DPadUp, (int)movPadState.DPadDown, (int)movPadState.DPadLeft, (int)movPadState.DPadRight, (int)movPadState.L, (int)movPadState.R, (int)movPadState.TriggerL, (int)movPadState.TriggerR, (int)movPadState.AnalogStickX, (int)movPadState.AnalogStickY, (int)movPadState.CStickX, (int)movPadState.CStickY);
+
+						}
+						break;
 					}
-					break;
+				}
+				delete[] movInput;
+			}
+		}
+		t_record.Close();
+
+		s_bSaveConfig = tmpHeader.bSaveConfig;
+
+		if (!afterEnd)
+		{
+			if (s_bReadOnly)
+			{
+				if (s_playMode != MODE_PLAYING)
+				{
+					s_playMode = MODE_PLAYING;
+					Core::DisplayMessage("Switched to playback", 2000);
 				}
 			}
-			delete [] movInput;
-		}
-	}
-	t_record.Close();
-
-	s_bSaveConfig = tmpHeader.bSaveConfig;
-
-	if (!afterEnd)
-	{
-		if (s_bReadOnly)
-		{
-			if (s_playMode != MODE_PLAYING)
+			else
 			{
-				s_playMode = MODE_PLAYING;
-				Core::DisplayMessage("Switched to playback", 2000);
+				if (s_playMode != MODE_RECORDING)
+				{
+					s_playMode = MODE_RECORDING;
+					justStoppedRecording = false;
+					Core::DisplayMessage("Switched to recording", 2000);
+				}
 			}
 		}
 		else
 		{
-			if (s_playMode != MODE_RECORDING)
-			{
-				s_playMode = MODE_RECORDING;
-				justStoppedRecording = false;
-				Core::DisplayMessage("Switched to recording", 2000);
-			}
+			EndPlayInput(false);
 		}
 	}
 	else
 	{
-		EndPlayInput(false);
+		t_record.ReadArray(&tmpHeader_Version12, 1);
+
+		if (!IsMovieHeader(tmpHeader_Version12.filetype))
+		{
+			PanicAlertT("Savestate movie %s is corrupted, movie recording stopping...", filename.c_str());
+			EndPlayInput(false);
+			return;
+		}
+		ReadHeader();
+		if (!s_bReadOnly)
+		{
+			s_rerecords++;
+			tmpHeader_Version12.numRerecords = s_rerecords;
+			t_record.Seek(0, SEEK_SET);
+			t_record.WriteArray(&tmpHeader_Version12, 1);
+		}
+
+		ChangePads(true);
+		if (SConfig::GetInstance().m_LocalCoreStartupParameter.bWii)
+			ChangeWiiPads(true);
+
+		u64 totalSavedBytes = t_record.GetSize() - 256;
+
+		bool afterEnd = false;
+		// This can only happen if the user manually deletes data from the dtm.
+		if (s_currentByte > totalSavedBytes)
+		{
+			PanicAlertT("Warning: You loaded a save whose movie ends before the current frame in the save (byte %u < %u) (frame %u < %u). You should load another save before continuing.", (u32)totalSavedBytes + 256, (u32)s_currentByte + 256, (u32)tmpHeader_Version12.frameCount, (u32)g_currentFrame);
+			afterEnd = true;
+			Host_Message(WM_USER_STOP);
+		}
+
+		if (!s_bReadOnly || tmpInput == nullptr)
+		{
+			g_totalFrames = tmpHeader_Version12.frameCount;
+			s_totalLagCount = tmpHeader_Version12.lagCount;
+			g_totalInputCount = tmpHeader_Version12.inputCount;
+			s_totalTickCount = s_tickCountAtLastInput = tmpHeader_Version12.tickCount;
+			s_bRecordingFromSaveState = tmpHeader_Version12.bFromSaveState; //Dragonbane
+
+			if (s_bRecordingFromSaveState && lastMovie.compare(filename))
+			{
+				std::string stateFilename = filename + ".sav";
+
+				if (File::Exists(tmpStateFilename))
+					File::Delete(tmpStateFilename);
+
+				File::Copy(stateFilename, tmpStateFilename);
+
+				lastMovie = filename;
+			}
+
+			EnsureTmpInputSize((size_t)totalSavedBytes);
+			s_totalBytes = totalSavedBytes;
+			t_record.ReadArray(tmpInput, (size_t)s_totalBytes);
+		}
+		else if (s_currentByte > 0)
+		{
+			if (s_currentByte > totalSavedBytes)
+			{
+			}
+			else if (s_currentByte > s_totalBytes)
+			{
+				afterEnd = true;
+				PanicAlertT("Warning: You loaded a save that's after the end of the current movie. (byte %u > %u) (frame %u > %u). You should load another save before continuing, or load this state with read-only mode off.", (u32)s_currentByte + 256, (u32)s_totalBytes + 256, (u32)g_currentFrame, (u32)g_totalFrames);
+			}
+			else if (s_currentByte > 0 && s_totalBytes > 0)
+			{
+				// verify identical from movie start to the save's current frame
+				u32 len = (u32)s_currentByte;
+				u8* movInput = new u8[len];
+				t_record.ReadArray(movInput, (size_t)len);
+				for (u32 i = 0; i < len; ++i)
+				{
+					if (movInput[i] != tmpInput[i])
+					{
+						// this is a "you did something wrong" alert for the user's benefit.
+						// we'll try to say what's going on in excruciating detail, otherwise the user might not believe us.
+						if (IsUsingWiimote(0))
+						{
+							// TODO: more detail
+							PanicAlertT("Warning: You loaded a save whose movie mismatches on byte %d (0x%X). You should load another save before continuing, or load this state with read-only mode off. Otherwise you'll probably get a desync.", i + 256, i + 256);
+							memcpy(tmpInput, movInput, s_currentByte);
+						}
+						else
+						{
+							if (State::ZE_VERSION > 1)
+							{
+								int frame = i / 16; //Dragonbane: 16
+								ControllerState_Version2 curPadState;
+								memcpy(&curPadState, &(tmpInput[frame * 16]), 16);
+								ControllerState_Version2 movPadState;
+								memcpy(&movPadState, &(movInput[frame * 16]), 16);
+								PanicAlertT("Warning: You loaded a save whose movie mismatches on frame %d. You should load another save before continuing, or load this state with read-only mode off. Otherwise you'll probably get a desync.\n\n"
+									"More information: The current movie is %d frames long and the savestate's movie is %d frames long.\n\n"
+									"On frame %d, the current movie presses:\n"
+									"Start=%d, A=%d, B=%d, X=%d, Y=%d, Z=%d, DUp=%d, DDown=%d, DLeft=%d, DRight=%d, L=%d, R=%d, LT=%d, RT=%d, AnalogX=%d, AnalogY=%d, CX=%d, CY=%d"
+									"\n\n"
+									"On frame %d, the savestate's movie presses:\n"
+									"Start=%d, A=%d, B=%d, X=%d, Y=%d, Z=%d, DUp=%d, DDown=%d, DLeft=%d, DRight=%d, L=%d, R=%d, LT=%d, RT=%d, AnalogX=%d, AnalogY=%d, CX=%d, CY=%d",
+									(int)frame,
+									(int)g_totalFrames, (int)tmpHeader_Version12.frameCount,
+									(int)frame,
+									(int)curPadState.Start, (int)curPadState.A, (int)curPadState.B, (int)curPadState.X, (int)curPadState.Y, (int)curPadState.Z, (int)curPadState.DPadUp, (int)curPadState.DPadDown, (int)curPadState.DPadLeft, (int)curPadState.DPadRight, (int)curPadState.L, (int)curPadState.R, (int)curPadState.TriggerL, (int)curPadState.TriggerR, (int)curPadState.AnalogStickX, (int)curPadState.AnalogStickY, (int)curPadState.CStickX, (int)curPadState.CStickY,
+									(int)frame,
+									(int)movPadState.Start, (int)movPadState.A, (int)movPadState.B, (int)movPadState.X, (int)movPadState.Y, (int)movPadState.Z, (int)movPadState.DPadUp, (int)movPadState.DPadDown, (int)movPadState.DPadLeft, (int)movPadState.DPadRight, (int)movPadState.L, (int)movPadState.R, (int)movPadState.TriggerL, (int)movPadState.TriggerR, (int)movPadState.AnalogStickX, (int)movPadState.AnalogStickY, (int)movPadState.CStickX, (int)movPadState.CStickY);
+							}
+							if (State::ZE_VERSION == 1)
+							{
+								int frame = i / 8; //Dragonbane: 8
+								ControllerState_Version1 curPadState;
+								memcpy(&curPadState, &(tmpInput[frame * 8]), 8);
+								ControllerState_Version1 movPadState;
+								memcpy(&movPadState, &(movInput[frame * 8]), 8);
+								PanicAlertT("Warning: You loaded a save whose movie mismatches on frame %d. You should load another save before continuing, or load this state with read-only mode off. Otherwise you'll probably get a desync.\n\n"
+									"More information: The current movie is %d frames long and the savestate's movie is %d frames long.\n\n"
+									"On frame %d, the current movie presses:\n"
+									"Start=%d, A=%d, B=%d, X=%d, Y=%d, Z=%d, DUp=%d, DDown=%d, DLeft=%d, DRight=%d, L=%d, R=%d, LT=%d, RT=%d, AnalogX=%d, AnalogY=%d, CX=%d, CY=%d"
+									"\n\n"
+									"On frame %d, the savestate's movie presses:\n"
+									"Start=%d, A=%d, B=%d, X=%d, Y=%d, Z=%d, DUp=%d, DDown=%d, DLeft=%d, DRight=%d, L=%d, R=%d, LT=%d, RT=%d, AnalogX=%d, AnalogY=%d, CX=%d, CY=%d",
+									(int)frame,
+									(int)g_totalFrames, (int)tmpHeader_Version12.frameCount,
+									(int)frame,
+									(int)curPadState.Start, (int)curPadState.A, (int)curPadState.B, (int)curPadState.X, (int)curPadState.Y, (int)curPadState.Z, (int)curPadState.DPadUp, (int)curPadState.DPadDown, (int)curPadState.DPadLeft, (int)curPadState.DPadRight, (int)curPadState.L, (int)curPadState.R, (int)curPadState.TriggerL, (int)curPadState.TriggerR, (int)curPadState.AnalogStickX, (int)curPadState.AnalogStickY, (int)curPadState.CStickX, (int)curPadState.CStickY,
+									(int)frame,
+									(int)movPadState.Start, (int)movPadState.A, (int)movPadState.B, (int)movPadState.X, (int)movPadState.Y, (int)movPadState.Z, (int)movPadState.DPadUp, (int)movPadState.DPadDown, (int)movPadState.DPadLeft, (int)movPadState.DPadRight, (int)movPadState.L, (int)movPadState.R, (int)movPadState.TriggerL, (int)movPadState.TriggerR, (int)movPadState.AnalogStickX, (int)movPadState.AnalogStickY, (int)movPadState.CStickX, (int)movPadState.CStickY);
+							}
+						}
+						break;
+					}
+				}
+				delete[] movInput;
+			}
+		}
+		t_record.Close();
+
+		s_bSaveConfig = tmpHeader_Version12.bSaveConfig;
+
+		if (!afterEnd)
+		{
+			if (s_bReadOnly)
+			{
+				if (s_playMode != MODE_PLAYING)
+				{
+					s_playMode = MODE_PLAYING;
+					Core::DisplayMessage("Switched to playback", 2000);
+				}
+			}
+			else
+			{
+				if (s_playMode != MODE_RECORDING)
+				{
+					s_playMode = MODE_RECORDING;
+					justStoppedRecording = false;
+					Core::DisplayMessage("Switched to recording", 2000);
+				}
+			}
+		}
+		else
+		{
+			EndPlayInput(false);
+		}
 	}
 }
 
@@ -2738,7 +3177,9 @@ void PlayController(GCPadStatus* PadStatus, int controllerID)
 	*/
 
 	//if (!memoryUpdated)
-	//{
+	//{}
+	if (State::ZE_VERSION > 2)
+	{
 		if (s_currentByte + 17 > s_totalBytes) //Dragonbane: 17
 		{
 			PanicAlertT("Premature movie end in PlayController. %u + 17 > %u", (u32)s_currentByte, (u32)s_totalBytes);
@@ -2748,7 +3189,31 @@ void PlayController(GCPadStatus* PadStatus, int controllerID)
 
 		memcpy(&s_padState, &(tmpInput[s_currentByte]), 17); //Dragonbane
 		s_currentByte += 17; //Dragonbane: 17
-	//}
+	}
+	else if (State::ZE_VERSION > 1)
+	{
+		if (s_currentByte + 16 > s_totalBytes) //Dragonbane: 16
+		{
+			PanicAlertT("Premature movie end in PlayController. %u + 16 > %u", (u32)s_currentByte, (u32)s_totalBytes);
+			EndPlayInput(!s_bReadOnly);
+			return;
+		}
+
+		memcpy(&s_padState_Version2, &(tmpInput[s_currentByte]), 16); //Dragonbane
+		s_currentByte += 16; //Dragonbane: 16
+	}
+	else if (State::ZE_VERSION == 1)
+	{
+		if (s_currentByte + 8 > s_totalBytes) //Dragonbane: 8
+		{
+			PanicAlertT("Premature movie end in PlayController. %u + 8 > %u", (u32)s_currentByte, (u32)s_totalBytes);
+			EndPlayInput(!s_bReadOnly);
+			return;
+		}
+
+		memcpy(&s_padState_Version1, &(tmpInput[s_currentByte]), 8); //Dragonbane
+		s_currentByte += 8; //Dragonbane: 8
+	}
 
 
 	// dtm files don't save the mic button or error bit. not sure if they're actually used, but better safe than sorry
@@ -2758,341 +3223,538 @@ void PlayController(GCPadStatus* PadStatus, int controllerID)
 
 
 	//Dragonbane: Check for desync
-	//TP Stuff
-	if (isTP)
+	if (State::ZE_VERSION > 1)
 	{
-		u32 characterpointer = Memory::Read_U32(charPointerAddress);
-		u32 isLoading = Memory::Read_U32(isLoadingAdd);
-
-
-		//1070
-		/*
-		//Legacy load times syncing
-		if (isLoading)
+		//TP Stuff
+		if (isTP)
 		{
+			u32 characterpointer = Memory::Read_U32(charPointerAddress);
+			u32 isLoading = Memory::Read_U32(isLoadingAdd);
+
+
+			//1070
+			/*
+			//Legacy load times syncing
+			if (isLoading)
+			{
 			if (!nowLoading)
 			{
-				if (!s_padState.loading)
-					Core::DisplayMessage("Game is loading, movie is not supposed to yet. RIP", 2000);
+			if (!s_padState.loading)
+			Core::DisplayMessage("Game is loading, movie is not supposed to yet. RIP", 2000);
 
-				if (s_padState.loading)
-				{
-					nowLoading = true;
-					lastLoadByte = s_currentByte - 17;
-				}
-			}
-		}
-		else
-		{
-			if (nowLoading)
+			if (s_padState.loading)
 			{
-				nowLoading = false;
-				u64 saved = s_currentByte - 17;
-				u64 currDiff = ((s_currentByte - 17) - lastLoadByte) / 17;
-
-				s_currentByte = lastLoadByte;
-
-				bool movieLoading = true;
-
-				while (movieLoading)
-				{
-					memcpy(&s_padState, &(tmpInput[s_currentByte]), 17);
-					s_currentByte += 17;
-
-					movieLoading = s_padState.loading;
-				}
-
-				u64 recDiff = ((s_currentByte - 17) - lastLoadByte) / 17;
-
-				if (currDiff > recDiff)
-				{
-					int framesAdd = currDiff - recDiff;
-
-					g_totalFrames += framesAdd;
-				}
-				else if (currDiff < recDiff)
-				{
-					int framesAdd = recDiff - currDiff;
-					g_currentFrame += framesAdd;
-					//g_totalFrames += framesAdd;
-				}
+			nowLoading = true;
+			lastLoadByte = s_currentByte - 17;
 			}
-
-		}
-
-		if (!waited && g_currentFrame == 992) //After Memory card formatting delay
-		{
-			waitFrames = 1;
-			waited = true;
-			reverseWait = false;
-		}
-
-		if (g_currentFrame == 995)
-			waited = false;
-
-
-
-
-		if (!waited && g_currentFrame == 2989) //After BiT Void
-		{
-			waitFrames = 1;
-			waited = true;
-			reverseWait = false;
-		}
-
-		if (g_currentFrame == 2993)
-			waited = false;
-
-
-
-		if (!waited && g_currentFrame == 3193) //After Reset
-		{
-			waitFrames = 1;
-			waited = true;
-			reverseWait = false;
-		}
-
-		if (g_currentFrame == 3196)
-			waited = false;
-
-
-
-		
-		if (!waited && g_currentFrame == 3475) //After Faron Load
-		{
-			waitFrames = 2;
-			waited = true;
-			reverseWait = true;
-		}
-
-		if (g_currentFrame == 3490)
-			waited = false;
-			
-
-		if (waitFrames > 0)
-		{
-			if (reverseWait)
-			{
-				s_currentByte -= 17;
-
-				s_currentByte += waitFrames*17;
-
-				memcpy(&s_padState, &(tmpInput[s_currentByte]), 17);
-
-				s_currentByte += 17;
-
-				g_currentFrame += waitFrames;
-				waitFrames = 0;
+			}
 			}
 			else
 			{
-				g_currentFrame--;
-				waitFrames--;
-
-				s_currentByte -= 17;
-
-				memcpy(&s_padState, &(tmpInput[s_currentByte - 17]), 17);
-			}
-		}
-		//Legacy Load Time Code End
-		*/
-
-	
-		if (characterpointer > 0x80000000 && isLoading == 0)
-		{
-			characterpointer -= 0x80000000;
-
-			float LinkX = Memory::Read_F32(characterpointer);
-			float LinkZ = Memory::Read_F32(characterpointer + 0x8);
-
-			if (s_padState.LinkX != LinkX || s_padState.LinkZ != LinkZ)
+			if (nowLoading)
 			{
-				std::string message = StringFromFormat("Desync detected on frame: %d!", g_currentFrame);
-				//std::string message = StringFromFormat("Desync detected! ExpX: %f, ExpLoad: %i, CurrX: %f, CurrLoad: %i", s_padState.LinkX, s_padState.loading, LinkX, isLoading);
-				Core::DisplayMessage(message, 2000);
+			nowLoading = false;
+			u64 saved = s_currentByte - 17;
+			u64 currDiff = ((s_currentByte - 17) - lastLoadByte) / 17;
 
-				desyncCount += 1;
+			s_currentByte = lastLoadByte;
 
-				/*
-				u8* memptr = Memory::m_pRAM;
-				if (memptr != nullptr && Core::IsRunningAndStarted())
+			bool movieLoading = true;
+
+			while (movieLoading)
+			{
+			memcpy(&s_padState, &(tmpInput[s_currentByte]), 17);
+			s_currentByte += 17;
+
+			movieLoading = s_padState.loading;
+			}
+
+			u64 recDiff = ((s_currentByte - 17) - lastLoadByte) / 17;
+
+			if (currDiff > recDiff)
+			{
+			int framesAdd = currDiff - recDiff;
+
+			g_totalFrames += framesAdd;
+			}
+			else if (currDiff < recDiff)
+			{
+			int framesAdd = recDiff - currDiff;
+			g_currentFrame += framesAdd;
+			//g_totalFrames += framesAdd;
+			}
+			}
+
+			}
+
+			if (!waited && g_currentFrame == 992) //After Memory card formatting delay
+			{
+			waitFrames = 1;
+			waited = true;
+			reverseWait = false;
+			}
+
+			if (g_currentFrame == 995)
+			waited = false;
+
+
+
+
+			if (!waited && g_currentFrame == 2989) //After BiT Void
+			{
+			waitFrames = 1;
+			waited = true;
+			reverseWait = false;
+			}
+
+			if (g_currentFrame == 2993)
+			waited = false;
+
+
+
+			if (!waited && g_currentFrame == 3193) //After Reset
+			{
+			waitFrames = 1;
+			waited = true;
+			reverseWait = false;
+			}
+
+			if (g_currentFrame == 3196)
+			waited = false;
+
+
+
+
+			if (!waited && g_currentFrame == 3475) //After Faron Load
+			{
+			waitFrames = 2;
+			waited = true;
+			reverseWait = true;
+			}
+
+			if (g_currentFrame == 3490)
+			waited = false;
+
+
+			if (waitFrames > 0)
+			{
+			if (reverseWait)
+			{
+			s_currentByte -= 17;
+
+			s_currentByte += waitFrames*17;
+
+			memcpy(&s_padState, &(tmpInput[s_currentByte]), 17);
+
+			s_currentByte += 17;
+
+			g_currentFrame += waitFrames;
+			waitFrames = 0;
+			}
+			else
+			{
+			g_currentFrame--;
+			waitFrames--;
+
+			s_currentByte -= 17;
+
+			memcpy(&s_padState, &(tmpInput[s_currentByte - 17]), 17);
+			}
+			}
+			//Legacy Load Time Code End
+			*/
+
+
+			if (characterpointer > 0x80000000 && isLoading == 0)
+			{
+				characterpointer -= 0x80000000;
+
+				float LinkX = Memory::Read_F32(characterpointer);
+				float LinkZ = Memory::Read_F32(characterpointer + 0x8);
+
+				if (State::ZE_VERSION > 2)
 				{
-					memcpy((memptr + 0xa0a000), &(tmpDynamicRange[0]), 1007616); //6316032);
-				}
-				*/
+					if (s_padState.LinkX != LinkX || s_padState.LinkZ != LinkZ)
+					{
+						std::string message = StringFromFormat("Desync detected on frame: %d!", g_currentFrame);
+						//std::string message = StringFromFormat("Desync detected! ExpX: %f, ExpLoad: %i, CurrX: %f, CurrLoad: %i", s_padState.LinkX, s_padState.loading, LinkX, isLoading);
+						Core::DisplayMessage(message, 2000);
 
-				//PanicAlertT("Desync occurred on frame: %d!\nMovie Link Pos: %.02f, %.02f | Curr Link Pos: %.02f, %.02f", g_currentFrame, s_padState.LinkX, s_padState.LinkZ, LinkX, LinkZ);
+						desyncCount += 1;
 
-				/*
-				bool matchFound = false;
+						/*
+						u8* memptr = Memory::m_pRAM;
+						if (memptr != nullptr && Core::IsRunningAndStarted())
+						{
+						memcpy((memptr + 0xa0a000), &(tmpDynamicRange[0]), 1007616); //6316032);
+						}
+						*/
 
-				ControllerState pastPadState;
-				memset(&pastPadState, 0, sizeof(pastPadState));
-				memcpy(&pastPadState, &(tmpInput[s_currentByte - 32]), 16);
+						//PanicAlertT("Desync occurred on frame: %d!\nMovie Link Pos: %.02f, %.02f | Curr Link Pos: %.02f, %.02f", g_currentFrame, s_padState.LinkX, s_padState.LinkZ, LinkX, LinkZ);
 
-				ControllerState nextPadState;
-				memset(&nextPadState, 0, sizeof(nextPadState));
-				memcpy(&nextPadState, &(tmpInput[s_currentByte]), 16);
+						/*
+						bool matchFound = false;
 
-				if (pastPadState.LinkX == LinkX && pastPadState.LinkZ == LinkZ)
-				{
-					s_currentByte -= 32;
-					memcpy(&s_padState, &(tmpInput[s_currentByte]), 16);
-					s_currentByte += 16;
+						ControllerState pastPadState;
+						memset(&pastPadState, 0, sizeof(pastPadState));
+						memcpy(&pastPadState, &(tmpInput[s_currentByte - 32]), 16);
 
-					matchFound = true;
-				}
-				else if (nextPadState.LinkX == LinkX && nextPadState.LinkZ == LinkZ)
-				{
-					memcpy(&s_padState, &(tmpInput[s_currentByte]), 16);
-					s_currentByte += 16;
+						ControllerState nextPadState;
+						memset(&nextPadState, 0, sizeof(nextPadState));
+						memcpy(&nextPadState, &(tmpInput[s_currentByte]), 16);
 
-					matchFound = true;
-				}
-				if (matchFound)
-				{
-					//PanicAlertT("Trying to match with: \nMovie Link Pos: %.02f, %.02f | Curr Link Pos: %.02f, %.02f", s_padState.LinkX, s_padState.LinkZ, LinkX, LinkZ);
+						if (pastPadState.LinkX == LinkX && pastPadState.LinkZ == LinkZ)
+						{
+						s_currentByte -= 32;
+						memcpy(&s_padState, &(tmpInput[s_currentByte]), 16);
+						s_currentByte += 16;
+
+						matchFound = true;
+						}
+						else if (nextPadState.LinkX == LinkX && nextPadState.LinkZ == LinkZ)
+						{
+						memcpy(&s_padState, &(tmpInput[s_currentByte]), 16);
+						s_currentByte += 16;
+
+						matchFound = true;
+						}
+						if (matchFound)
+						{
+						//PanicAlertT("Trying to match with: \nMovie Link Pos: %.02f, %.02f | Curr Link Pos: %.02f, %.02f", s_padState.LinkX, s_padState.LinkZ, LinkX, LinkZ);
+						}
+						else
+						{
+						PanicAlertT("Unable to recover from desync, end playback!");
+						EndPlayInput(!s_bReadOnly);
+						return;
+						}
+						*/
+					}
 				}
 				else
 				{
-					PanicAlertT("Unable to recover from desync, end playback!");
-					EndPlayInput(!s_bReadOnly);
-					return;
+					if (s_padState_Version2.LinkX != LinkX || s_padState_Version2.LinkZ != LinkZ)
+					{
+						std::string message = StringFromFormat("Desync detected on frame: %d!", g_currentFrame);
+						Core::DisplayMessage(message, 2000);
+
+						desyncCount += 1;
+					}
 				}
-				*/
 			}
 		}
-	}
 
 
-	//TWW Stuff
-	if (isTWW)
-	{
-		u8 isLoading = Memory::Read_U8(isLoadingAdd);
-
-		if (isLoading == 0)
+		//TWW Stuff
+		if (isTWW)
 		{
-			u32 XAdd = 0x3d78fc;
-			u32 ZAdd = 0x3d7904;
+			u8 isLoading = Memory::Read_U8(isLoadingAdd);
 
-			float LinkX = Memory::Read_F32(XAdd);
-			float LinkZ = Memory::Read_F32(ZAdd);
-
-			if (s_padState.LinkX != LinkX || s_padState.LinkZ != LinkZ)
+			if (isLoading == 0)
 			{
-				std::string message = StringFromFormat("Desync detected on frame: %d!", g_currentFrame);
-				Core::DisplayMessage(message, 2000);
+				u32 XAdd = 0x3d78fc;
+				u32 ZAdd = 0x3d7904;
 
-				desyncCount += 1;
+				float LinkX = Memory::Read_F32(XAdd);
+				float LinkZ = Memory::Read_F32(ZAdd);
+
+				if (State::ZE_VERSION > 2)
+				{
+					if (s_padState.LinkX != LinkX || s_padState.LinkZ != LinkZ)
+					{
+						std::string message = StringFromFormat("Desync detected on frame: %d!", g_currentFrame);
+						Core::DisplayMessage(message, 2000);
+
+						desyncCount += 1;
+					}
+				}
+				else
+				{
+					if (s_padState_Version2.LinkX != LinkX || s_padState_Version2.LinkZ != LinkZ)
+					{
+						std::string message = StringFromFormat("Desync detected on frame: %d!", g_currentFrame);
+						Core::DisplayMessage(message, 2000);
+
+						desyncCount += 1;
+					}
+				}
 			}
 		}
-	}
 
 
-	//FSA Stuff
-	if (isFSA)
-	{
-		u32 characterpointer = Memory::Read_U32(charPointerAddress);
-		u32 isLoading = Memory::Read_U32(isLoadingAdd);
-
-		if (characterpointer > 0x80000000 && isLoading == 0)
+		//FSA Stuff
+		if (isFSA)
 		{
-			characterpointer -= 0x80000000;
+			u32 characterpointer = Memory::Read_U32(charPointerAddress);
+			u32 isLoading = Memory::Read_U32(isLoadingAdd);
 
-			float LinkX = Memory::Read_F32(characterpointer + 0x8C);
-			float LinkZ = Memory::Read_F32(characterpointer + 0x90);
-
-			if (s_padState.LinkX != LinkX || s_padState.LinkZ != LinkZ)
+			if (characterpointer > 0x80000000 && isLoading == 0)
 			{
-				std::string message = StringFromFormat("Desync detected on frame: %d!", g_currentFrame);
-				Core::DisplayMessage(message, 2000);
+				characterpointer -= 0x80000000;
 
-				desyncCount += 1;
+				float LinkX = Memory::Read_F32(characterpointer + 0x8C);
+				float LinkZ = Memory::Read_F32(characterpointer + 0x90);
+
+				if (State::ZE_VERSION > 2)
+				{
+					if (s_padState.LinkX != LinkX || s_padState.LinkZ != LinkZ)
+					{
+						std::string message = StringFromFormat("Desync detected on frame: %d!", g_currentFrame);
+						Core::DisplayMessage(message, 2000);
+
+						desyncCount += 1;
+					}
+				}
+				else
+				{
+					if (s_padState_Version2.LinkX != LinkX || s_padState_Version2.LinkZ != LinkZ)
+					{
+						std::string message = StringFromFormat("Desync detected on frame: %d!", g_currentFrame);
+						Core::DisplayMessage(message, 2000);
+
+						desyncCount += 1;
+					}
+				}
 			}
 		}
 	}
 
-
-	PadStatus->triggerLeft = s_padState.TriggerL;
-	PadStatus->triggerRight = s_padState.TriggerR;
-
-	PadStatus->stickX = s_padState.AnalogStickX;
-	PadStatus->stickY = s_padState.AnalogStickY;
-
-	PadStatus->substickX = s_padState.CStickX;
-	PadStatus->substickY = s_padState.CStickY;
-
-	PadStatus->button |= PAD_USE_ORIGIN;
-
-	if (s_padState.A)
+	if (State::ZE_VERSION > 2)
 	{
-		PadStatus->button |= PAD_BUTTON_A;
-		PadStatus->analogA = 0xFF;
-	}
-	if (s_padState.B)
-	{
-		PadStatus->button |= PAD_BUTTON_B;
-		PadStatus->analogB = 0xFF;
-	}
-	if (s_padState.X)
-		PadStatus->button |= PAD_BUTTON_X;
-	if (s_padState.Y)
-		PadStatus->button |= PAD_BUTTON_Y;
-	if (s_padState.Z)
-		PadStatus->button |= PAD_TRIGGER_Z;
-	if (s_padState.Start)
-		PadStatus->button |= PAD_BUTTON_START;
+		PadStatus->triggerLeft = s_padState.TriggerL;
+		PadStatus->triggerRight = s_padState.TriggerR;
 
-	if (s_padState.DPadUp)
-		PadStatus->button |= PAD_BUTTON_UP;
-	if (s_padState.DPadDown)
-		PadStatus->button |= PAD_BUTTON_DOWN;
-	if (s_padState.DPadLeft)
-		PadStatus->button |= PAD_BUTTON_LEFT;
-	if (s_padState.DPadRight)
-		PadStatus->button |= PAD_BUTTON_RIGHT;
+		PadStatus->stickX = s_padState.AnalogStickX;
+		PadStatus->stickY = s_padState.AnalogStickY;
 
-	if (s_padState.L)
-		PadStatus->button |= PAD_TRIGGER_L;
-	if (s_padState.R)
-		PadStatus->button |= PAD_TRIGGER_R;
-	if (s_padState.disc)
-	{
-		// This implementation assumes the disc change will only happen once. Trying to change more than that will cause
-		// it to load the last disc every time. As far as i know though, there are no 3+ disc games, so this should be fine.
-		Core::SetState(Core::CORE_PAUSE);
-		bool found = false;
-		std::string path;
-		for (size_t i = 0; i < SConfig::GetInstance().m_ISOFolder.size(); ++i)
+		PadStatus->substickX = s_padState.CStickX;
+		PadStatus->substickY = s_padState.CStickY;
+
+		PadStatus->button |= PAD_USE_ORIGIN;
+
+		if (s_padState.A)
 		{
-			path = SConfig::GetInstance().m_ISOFolder[i];
-			if (File::Exists(path + '/' + g_discChange))
+			PadStatus->button |= PAD_BUTTON_A;
+			PadStatus->analogA = 0xFF;
+		}
+		if (s_padState.B)
+		{
+			PadStatus->button |= PAD_BUTTON_B;
+			PadStatus->analogB = 0xFF;
+		}
+		if (s_padState.X)
+			PadStatus->button |= PAD_BUTTON_X;
+		if (s_padState.Y)
+			PadStatus->button |= PAD_BUTTON_Y;
+		if (s_padState.Z)
+			PadStatus->button |= PAD_TRIGGER_Z;
+		if (s_padState.Start)
+			PadStatus->button |= PAD_BUTTON_START;
+
+		if (s_padState.DPadUp)
+			PadStatus->button |= PAD_BUTTON_UP;
+		if (s_padState.DPadDown)
+			PadStatus->button |= PAD_BUTTON_DOWN;
+		if (s_padState.DPadLeft)
+			PadStatus->button |= PAD_BUTTON_LEFT;
+		if (s_padState.DPadRight)
+			PadStatus->button |= PAD_BUTTON_RIGHT;
+
+		if (s_padState.L)
+			PadStatus->button |= PAD_TRIGGER_L;
+		if (s_padState.R)
+			PadStatus->button |= PAD_TRIGGER_R;
+		if (s_padState.disc)
+		{
+			// This implementation assumes the disc change will only happen once. Trying to change more than that will cause
+			// it to load the last disc every time. As far as i know though, there are no 3+ disc games, so this should be fine.
+			Core::SetState(Core::CORE_PAUSE);
+			bool found = false;
+			std::string path;
+			for (size_t i = 0; i < SConfig::GetInstance().m_ISOFolder.size(); ++i)
 			{
-				found = true;
-				break;
+				path = SConfig::GetInstance().m_ISOFolder[i];
+				if (File::Exists(path + '/' + g_discChange))
+				{
+					found = true;
+					break;
+				}
+			}
+			if (found)
+			{
+				DVDInterface::ChangeDisc(path + '/' + g_discChange);
+				Core::SetState(Core::CORE_RUN);
+			}
+			else
+			{
+				PanicAlertT("Change the disc to %s", g_discChange.c_str());
 			}
 		}
-		if (found)
+
+		if (s_padState.reset)
+			ProcessorInterface::ResetButton_Tap();
+
+		//Dragonbane: Execute Tuner Events
+		if (s_padState.tunerEvent > 0)
 		{
-			DVDInterface::ChangeDisc(path + '/' + g_discChange);
-			Core::SetState(Core::CORE_RUN);
+			tunerExecuteID = s_padState.tunerEvent;
 		}
-		else
-		{
-			PanicAlertT("Change the disc to %s", g_discChange.c_str());
-		}
+
+		SetInputDisplayString(s_padState, controllerID);
 	}
-
-	if (s_padState.reset)
-		ProcessorInterface::ResetButton_Tap();
-
-	//Dragonbane: Execute Tuner Events
-	if (s_padState.tunerEvent > 0)
+	else if (State::ZE_VERSION > 1)
 	{
-		tunerExecuteID = s_padState.tunerEvent;
+		PadStatus->triggerLeft = s_padState_Version2.TriggerL;
+		PadStatus->triggerRight = s_padState_Version2.TriggerR;
+
+		PadStatus->stickX = s_padState_Version2.AnalogStickX;
+		PadStatus->stickY = s_padState_Version2.AnalogStickY;
+
+		PadStatus->substickX = s_padState_Version2.CStickX;
+		PadStatus->substickY = s_padState_Version2.CStickY;
+
+		PadStatus->button |= PAD_USE_ORIGIN;
+
+		if (s_padState_Version2.A)
+		{
+			PadStatus->button |= PAD_BUTTON_A;
+			PadStatus->analogA = 0xFF;
+		}
+		if (s_padState_Version2.B)
+		{
+			PadStatus->button |= PAD_BUTTON_B;
+			PadStatus->analogB = 0xFF;
+		}
+		if (s_padState_Version2.X)
+			PadStatus->button |= PAD_BUTTON_X;
+		if (s_padState_Version2.Y)
+			PadStatus->button |= PAD_BUTTON_Y;
+		if (s_padState_Version2.Z)
+			PadStatus->button |= PAD_TRIGGER_Z;
+		if (s_padState_Version2.Start)
+			PadStatus->button |= PAD_BUTTON_START;
+
+		if (s_padState_Version2.DPadUp)
+			PadStatus->button |= PAD_BUTTON_UP;
+		if (s_padState_Version2.DPadDown)
+			PadStatus->button |= PAD_BUTTON_DOWN;
+		if (s_padState_Version2.DPadLeft)
+			PadStatus->button |= PAD_BUTTON_LEFT;
+		if (s_padState_Version2.DPadRight)
+			PadStatus->button |= PAD_BUTTON_RIGHT;
+
+		if (s_padState_Version2.L)
+			PadStatus->button |= PAD_TRIGGER_L;
+		if (s_padState_Version2.R)
+			PadStatus->button |= PAD_TRIGGER_R;
+		if (s_padState_Version2.disc)
+		{
+			// This implementation assumes the disc change will only happen once. Trying to change more than that will cause
+			// it to load the last disc every time. As far as i know though, there are no 3+ disc games, so this should be fine.
+			Core::SetState(Core::CORE_PAUSE);
+			bool found = false;
+			std::string path;
+			for (size_t i = 0; i < SConfig::GetInstance().m_ISOFolder.size(); ++i)
+			{
+				path = SConfig::GetInstance().m_ISOFolder[i];
+				if (File::Exists(path + '/' + g_discChange))
+				{
+					found = true;
+					break;
+				}
+			}
+			if (found)
+			{
+				DVDInterface::ChangeDisc(path + '/' + g_discChange);
+				Core::SetState(Core::CORE_RUN);
+			}
+			else
+			{
+				PanicAlertT("Change the disc to %s", g_discChange.c_str());
+			}
+		}
+
+
+		if (s_padState_Version2.reset)
+			ProcessorInterface::ResetButton_Tap();
+	}
+	else if (State::ZE_VERSION == 1)
+	{
+		PadStatus->triggerLeft = s_padState_Version1.TriggerL;
+		PadStatus->triggerRight = s_padState_Version1.TriggerR;
+
+		PadStatus->stickX = s_padState_Version1.AnalogStickX;
+		PadStatus->stickY = s_padState_Version1.AnalogStickY;
+
+		PadStatus->substickX = s_padState_Version1.CStickX;
+		PadStatus->substickY = s_padState_Version1.CStickY;
+
+		PadStatus->button |= PAD_USE_ORIGIN;
+
+		if (s_padState_Version1.A)
+		{
+			PadStatus->button |= PAD_BUTTON_A;
+			PadStatus->analogA = 0xFF;
+		}
+		if (s_padState_Version1.B)
+		{
+			PadStatus->button |= PAD_BUTTON_B;
+			PadStatus->analogB = 0xFF;
+		}
+		if (s_padState_Version1.X)
+			PadStatus->button |= PAD_BUTTON_X;
+		if (s_padState_Version1.Y)
+			PadStatus->button |= PAD_BUTTON_Y;
+		if (s_padState_Version1.Z)
+			PadStatus->button |= PAD_TRIGGER_Z;
+		if (s_padState_Version1.Start)
+			PadStatus->button |= PAD_BUTTON_START;
+
+		if (s_padState_Version1.DPadUp)
+			PadStatus->button |= PAD_BUTTON_UP;
+		if (s_padState_Version1.DPadDown)
+			PadStatus->button |= PAD_BUTTON_DOWN;
+		if (s_padState_Version1.DPadLeft)
+			PadStatus->button |= PAD_BUTTON_LEFT;
+		if (s_padState_Version1.DPadRight)
+			PadStatus->button |= PAD_BUTTON_RIGHT;
+
+		if (s_padState_Version1.L)
+			PadStatus->button |= PAD_TRIGGER_L;
+		if (s_padState_Version1.R)
+			PadStatus->button |= PAD_TRIGGER_R;
+		if (s_padState_Version1.disc)
+		{
+			// This implementation assumes the disc change will only happen once. Trying to change more than that will cause
+			// it to load the last disc every time. As far as i know though, there are no 3+ disc games, so this should be fine.
+			Core::SetState(Core::CORE_PAUSE);
+			bool found = false;
+			std::string path;
+			for (size_t i = 0; i < SConfig::GetInstance().m_ISOFolder.size(); ++i)
+			{
+				path = SConfig::GetInstance().m_ISOFolder[i];
+				if (File::Exists(path + '/' + g_discChange))
+				{
+					found = true;
+					break;
+				}
+			}
+			if (found)
+			{
+				DVDInterface::ChangeDisc(path + '/' + g_discChange);
+				Core::SetState(Core::CORE_RUN);
+			}
+			else
+			{
+				PanicAlertT("Change the disc to %s", g_discChange.c_str());
+			}
+		}
+
+
+		if (s_padState_Version1.reset)
+			ProcessorInterface::ResetButton_Tap();
 	}
 
-	SetInputDisplayString(s_padState, controllerID);
 	CheckInputEnd();
 }
 
@@ -3219,57 +3881,114 @@ void EndPlayInput(bool cont)
 void SaveRecording(const std::string& filename)
 {
 	File::IOFile save_record(filename, "wb");
-	// Create the real header now and write it
-	DTMHeader header;
-	memset(&header, 0, sizeof(DTMHeader));
 
-	header.filetype[0] = 'D'; header.filetype[1] = 'T'; header.filetype[2] = 'M'; header.filetype[3] = 0x1A;
-	strncpy((char *)header.gameID, SConfig::GetInstance().m_LocalCoreStartupParameter.GetUniqueID().c_str(), 6);
-	header.bWii = SConfig::GetInstance().m_LocalCoreStartupParameter.bWii;
-	header.numControllers = s_numPads & (SConfig::GetInstance().m_LocalCoreStartupParameter.bWii ? 0xFF : 0x0F);
+	if (State::ZE_VERSION > 2)
+	{
+		// Create the real header now and write it
+		DTMHeader header;
+		memset(&header, 0, sizeof(DTMHeader));
 
-	header.bFromSaveState = s_bRecordingFromSaveState;
-	header.frameCount = g_totalFrames;
-	header.lagCount = s_totalLagCount;
-	header.inputCount = g_totalInputCount;
-	header.numRerecords = s_rerecords;
-	header.recordingStartTime = s_recordingStartTime;
+		header.filetype[0] = 'D'; header.filetype[1] = 'T'; header.filetype[2] = 'M'; header.filetype[3] = 0x1A;
+		strncpy((char *)header.gameID, SConfig::GetInstance().m_LocalCoreStartupParameter.GetUniqueID().c_str(), 6);
+		header.bWii = SConfig::GetInstance().m_LocalCoreStartupParameter.bWii;
+		header.numControllers = s_numPads & (SConfig::GetInstance().m_LocalCoreStartupParameter.bWii ? 0xFF : 0x0F);
 
-	header.bSaveConfig = true;
-	header.bSkipIdle = s_bSkipIdle;
-	header.bDualCore = s_bDualCore;
-	header.bProgressive = s_bProgressive;
-	header.bDSPHLE = s_bDSPHLE;
-	header.bFastDiscSpeed = s_bFastDiscSpeed;
-	strncpy((char *)header.videoBackend, s_videoBackend.c_str(),ArraySize(header.videoBackend));
-	header.CPUCore = s_iCPUCore;
-	header.bEFBAccessEnable = g_ActiveConfig.bEFBAccessEnable;
-	header.bEFBCopyEnable = g_ActiveConfig.bEFBCopyEnable;
-	header.bCopyEFBToTexture = g_ActiveConfig.bCopyEFBToTexture;
-	header.bEFBCopyCacheEnable = false;
-	header.bEFBEmulateFormatChanges = g_ActiveConfig.bEFBEmulateFormatChanges;
-	header.bUseXFB = g_ActiveConfig.bUseXFB;
-	header.bUseRealXFB = g_ActiveConfig.bUseRealXFB;
-	header.memcards = s_memcards;
-	header.bClearSave = g_bClearSave;
-	header.bSyncGPU = s_bSyncGPU;
-	header.bNetPlay = s_bNetPlay;
-	strncpy((char *)header.discChange, g_discChange.c_str(),ArraySize(header.discChange));
-	strncpy((char *)header.author, s_author.c_str(),ArraySize(header.author));
-	memcpy(header.md5,s_MD5,16);
-	header.bongos = s_bongos;
-	header.numGBAs = s_numGBAs; //Dragonbane
-	memcpy(header.revision, s_revision, ArraySize(header.revision));
-	header.DSPiromHash = s_DSPiromHash;
-	header.DSPcoefHash = s_DSPcoefHash;
-	header.tickCount = s_totalTickCount;
+		header.bFromSaveState = s_bRecordingFromSaveState;
+		header.frameCount = g_totalFrames;
+		header.lagCount = s_totalLagCount;
+		header.inputCount = g_totalInputCount;
+		header.numRerecords = s_rerecords;
+		header.recordingStartTime = s_recordingStartTime;
+
+		header.bSaveConfig = true;
+		header.bSkipIdle = s_bSkipIdle;
+		header.bDualCore = s_bDualCore;
+		header.bProgressive = s_bProgressive;
+		header.bDSPHLE = s_bDSPHLE;
+		header.bFastDiscSpeed = s_bFastDiscSpeed;
+		strncpy((char *)header.videoBackend, s_videoBackend.c_str(), ArraySize(header.videoBackend));
+		header.CPUCore = s_iCPUCore;
+		header.bEFBAccessEnable = g_ActiveConfig.bEFBAccessEnable;
+		header.bEFBCopyEnable = g_ActiveConfig.bEFBCopyEnable;
+		header.bCopyEFBToTexture = g_ActiveConfig.bCopyEFBToTexture;
+		header.bEFBCopyCacheEnable = false;
+		header.bEFBEmulateFormatChanges = g_ActiveConfig.bEFBEmulateFormatChanges;
+		header.bUseXFB = g_ActiveConfig.bUseXFB;
+		header.bUseRealXFB = g_ActiveConfig.bUseRealXFB;
+		header.memcards = s_memcards;
+		header.bClearSave = g_bClearSave;
+		header.bSyncGPU = s_bSyncGPU;
+		header.bNetPlay = s_bNetPlay;
+		strncpy((char *)header.discChange, g_discChange.c_str(), ArraySize(header.discChange));
+		strncpy((char *)header.author, s_author.c_str(), ArraySize(header.author));
+		memcpy(header.md5, s_MD5, 16);
+		header.bongos = s_bongos;
+		header.numGBAs = s_numGBAs; //Dragonbane
+		memcpy(header.revision, s_revision, ArraySize(header.revision));
+		header.DSPiromHash = s_DSPiromHash;
+		header.DSPcoefHash = s_DSPcoefHash;
+		header.tickCount = s_totalTickCount;
 
 
-	// TODO
-	header.uniqueID = 0;
-	// header.audioEmulator;
+		// TODO
+		header.uniqueID = 0;
+		// header.audioEmulator;
 
-	save_record.WriteArray(&header, 1);
+		save_record.WriteArray(&header, 1);
+	}
+	else
+	{
+		// Create the real header now and write it
+		DTMHeader_Version12 header;
+		memset(&header, 0, sizeof(DTMHeader_Version12));
+
+		header.filetype[0] = 'D'; header.filetype[1] = 'T'; header.filetype[2] = 'M'; header.filetype[3] = 0x1A;
+		strncpy((char *)header.gameID, SConfig::GetInstance().m_LocalCoreStartupParameter.GetUniqueID().c_str(), 6);
+		header.bWii = SConfig::GetInstance().m_LocalCoreStartupParameter.bWii;
+		header.numControllers = s_numPads & (SConfig::GetInstance().m_LocalCoreStartupParameter.bWii ? 0xFF : 0x0F);
+
+		header.bFromSaveState = s_bRecordingFromSaveState;
+		header.frameCount = g_totalFrames;
+		header.lagCount = s_totalLagCount;
+		header.inputCount = g_totalInputCount;
+		header.numRerecords = s_rerecords;
+		header.recordingStartTime = s_recordingStartTime;
+
+		header.bSaveConfig = true;
+		header.bSkipIdle = s_bSkipIdle;
+		header.bDualCore = s_bDualCore;
+		header.bProgressive = s_bProgressive;
+		header.bDSPHLE = s_bDSPHLE;
+		header.bFastDiscSpeed = s_bFastDiscSpeed;
+		strncpy((char *)header.videoBackend, s_videoBackend.c_str(), ArraySize(header.videoBackend));
+		header.CPUCore = s_iCPUCore;
+		header.bEFBAccessEnable = g_ActiveConfig.bEFBAccessEnable;
+		header.bEFBCopyEnable = g_ActiveConfig.bEFBCopyEnable;
+		header.bCopyEFBToTexture = g_ActiveConfig.bCopyEFBToTexture;
+		header.bEFBCopyCacheEnable = false;
+		header.bEFBEmulateFormatChanges = g_ActiveConfig.bEFBEmulateFormatChanges;
+		header.bUseXFB = g_ActiveConfig.bUseXFB;
+		header.bUseRealXFB = g_ActiveConfig.bUseRealXFB;
+		header.memcards = s_memcards;
+		header.bClearSave = g_bClearSave;
+		header.bSyncGPU = s_bSyncGPU;
+		header.bNetPlay = s_bNetPlay;
+		strncpy((char *)header.discChange, g_discChange.c_str(), ArraySize(header.discChange));
+		strncpy((char *)header.author, s_author.c_str(), ArraySize(header.author));
+		memcpy(header.md5, s_MD5, 16);
+		header.bongos = s_bongos;
+		memcpy(header.revision, s_revision, ArraySize(header.revision));
+		header.DSPiromHash = s_DSPiromHash;
+		header.DSPcoefHash = s_DSPcoefHash;
+		header.tickCount = s_totalTickCount;
+
+
+		// TODO
+		header.uniqueID = 0;
+		// header.audioEmulator;
+
+		save_record.WriteArray(&header, 1);
+	}
 
 	bool success = save_record.WriteArray(tmpInput, (size_t)s_totalBytes);
 
@@ -3307,12 +4026,24 @@ void CallWiiInputManip(u8* data, WiimoteEmu::ReportFeatures rptf, int controller
 
 void SetGraphicsConfig()
 {
-	g_Config.bEFBAccessEnable = tmpHeader.bEFBAccessEnable;
-	g_Config.bEFBCopyEnable = tmpHeader.bEFBCopyEnable;
-	g_Config.bCopyEFBToTexture = tmpHeader.bCopyEFBToTexture;
-	g_Config.bEFBEmulateFormatChanges = tmpHeader.bEFBEmulateFormatChanges;
-	g_Config.bUseXFB = tmpHeader.bUseXFB;
-	g_Config.bUseRealXFB = tmpHeader.bUseRealXFB;
+	if (State::ZE_VERSION > 2)
+	{
+		g_Config.bEFBAccessEnable = tmpHeader.bEFBAccessEnable;
+		g_Config.bEFBCopyEnable = tmpHeader.bEFBCopyEnable;
+		g_Config.bCopyEFBToTexture = tmpHeader.bCopyEFBToTexture;
+		g_Config.bEFBEmulateFormatChanges = tmpHeader.bEFBEmulateFormatChanges;
+		g_Config.bUseXFB = tmpHeader.bUseXFB;
+		g_Config.bUseRealXFB = tmpHeader.bUseRealXFB;
+	}
+	else
+	{
+		g_Config.bEFBAccessEnable = tmpHeader_Version12.bEFBAccessEnable;
+		g_Config.bEFBCopyEnable = tmpHeader_Version12.bEFBCopyEnable;
+		g_Config.bCopyEFBToTexture = tmpHeader_Version12.bCopyEFBToTexture;
+		g_Config.bEFBEmulateFormatChanges = tmpHeader_Version12.bEFBEmulateFormatChanges;
+		g_Config.bUseXFB = tmpHeader_Version12.bUseXFB;
+		g_Config.bUseRealXFB = tmpHeader_Version12.bUseRealXFB;
+	}
 }
 
 void GetSettings()
@@ -3373,14 +4104,29 @@ void GetSettings()
 
 void CheckMD5()
 {
-	for (int i = 0, n = 0; i < 16; ++i)
+	if (State::ZE_VERSION > 2)
 	{
-		if (tmpHeader.md5[i] != 0)
-			continue;
-		n++;
-		if (n == 16)
-			return;
+		for (int i = 0, n = 0; i < 16; ++i)
+		{
+			if (tmpHeader.md5[i] != 0)
+				continue;
+			n++;
+			if (n == 16)
+				return;
+		}
 	}
+	else
+	{
+		for (int i = 0, n = 0; i < 16; ++i)
+		{
+			if (tmpHeader_Version12.md5[i] != 0)
+				continue;
+			n++;
+			if (n == 16)
+				return;
+		}
+	}
+
 	Core::DisplayMessage("Verifying checksum...", 2000);
 
 	unsigned char gameMD5[16];
@@ -3659,20 +4405,40 @@ bool IsMovieFromSaveState(const std::string& moviename)
 	if (!g_recordfd.Open(moviename, "rb"))
 		return false;
 
-	DTMHeader tmpHead;
+	if (State::ZE_VERSION > 2)
+	{
+		DTMHeader tmpHead;
 
-	g_recordfd.ReadArray(&tmpHead, 1);
+		g_recordfd.ReadArray(&tmpHead, 1);
 
-	g_recordfd.Close();
+		g_recordfd.Close();
 
-	if (!IsMovieHeader(tmpHead.filetype))
-		return false;
+		if (!IsMovieHeader(tmpHead.filetype))
+			return false;
 
 
-	if (tmpHead.bFromSaveState)
-		return true;
+		if (tmpHead.bFromSaveState)
+			return true;
+		else
+			return false;
+	}
 	else
-		return false;
+	{
+		DTMHeader_Version12 tmpHead;
+
+		g_recordfd.ReadArray(&tmpHead, 1);
+
+		g_recordfd.Close();
+
+		if (!IsMovieHeader(tmpHead.filetype))
+			return false;
+
+
+		if (tmpHead.bFromSaveState)
+			return true;
+		else
+			return false;
+	}
 		
 }
 bool AutoVerify()

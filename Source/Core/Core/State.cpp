@@ -428,8 +428,20 @@ static void LoadFileStateData(const std::string& filename, std::vector<u8>& ret_
 		}
 	}
 
+	/*
+	File::IOFile g(filename + "_uncomp.sav", "wb");
+
+	const u8* const buffer_data = &buffer[0];
+	const size_t buffer_size = buffer.size();
+
+	g.WriteArray(&header, 1);
+	g.WriteBytes(buffer_data, buffer_size);
+
+	g.Close();
+	*/
+
 	// all good
-	ret_data.swap(buffer);
+	ret_data.swap(buffer);	
 }
 
 void LoadAs(const std::string& filename)

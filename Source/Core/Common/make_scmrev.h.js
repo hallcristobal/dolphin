@@ -65,7 +65,7 @@ function GetFileContents(f)
 //Dragonbane
 var gitexe = GetGitExe();
 var revision	= GetFirstStdOutLine(gitexe + cmd_revision);
-var describe = "4.0-5371 [Zelda Edition 6.0]";
+var describe = "4.0-5371 [Zelda Edition 7.0]";
 var branch		= ""; //GetFirstStdOutLine(gitexe + cmd_branch);
 var isStable = 1; //+("master" == branch || "stable" == branch);
 

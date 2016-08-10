@@ -43,6 +43,15 @@
       <AdditionalDependencies>lua5.3.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Lib>
   </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <ClCompile>
+      <AdditionalIncludeDirectories>$(ExternalsDir)lua-5.3.1\src;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+    </ClCompile>
+    <Lib>
+      <AdditionalDependencies>lua5.3.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>$(ExternalsDir)lua-5.3.1\src;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+    </Lib>
+  </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="ActionReplay.cpp" />
     <ClCompile Include="ARDecrypt.cpp" />

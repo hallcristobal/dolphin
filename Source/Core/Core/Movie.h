@@ -58,6 +58,46 @@ struct ControllerState
 static_assert(sizeof(ControllerState) == 17, "ControllerState should be 17 bytes"); //Dragonbane
 #pragma pack(pop)
 
+#pragma pack(push,1)
+struct ControllerState_Version2
+{
+	bool Start : 1, A : 1, B : 1, X : 1, Y : 1, Z : 1; // Binary buttons, 6 bits
+	bool DPadUp : 1, DPadDown : 1,             // Binary D-Pad buttons, 4 bits
+	DPadLeft : 1, DPadRight : 1;
+	bool L : 1, R : 1;                         // Binary triggers, 2 bits
+	bool disc : 1;                           // Checks for disc being changed
+	bool reset : 1;                          // Console reset button
+	bool loading : 1;                        // Dragonbane: Loading status flag, 1 bit
+	bool reserved : 1;                       // Reserved bits used for padding, 1 bit
+
+	u8   TriggerL, TriggerR;               // Triggers, 16 bits
+	u8   AnalogStickX, AnalogStickY;       // Main Stick, 16 bits
+	u8   CStickX, CStickY;                 // Sub-Stick, 16 bits
+
+	float LinkX, LinkZ;					   // Dragonbane: Used to detect desyncs, 64 bits
+};
+static_assert(sizeof(ControllerState_Version2) == 16, "ControllerState should be 16 bytes"); //Dragonbane
+#pragma pack(pop)
+
+#pragma pack(push,1)
+struct ControllerState_Version1
+{
+	bool Start : 1, A : 1, B : 1, X : 1, Y : 1, Z : 1; // Binary buttons, 6 bits
+	bool DPadUp : 1, DPadDown : 1,             // Binary D-Pad buttons, 4 bits
+	DPadLeft : 1, DPadRight : 1;
+	bool L : 1, R : 1;                         // Binary triggers, 2 bits
+	bool disc : 1;                           // Checks for disc being changed
+	bool reset : 1;                          // Console reset button
+	bool reserved : 2;                       // Reserved bits used for padding, 2 bit
+
+	u8   TriggerL, TriggerR;               // Triggers, 16 bits
+	u8   AnalogStickX, AnalogStickY;       // Main Stick, 16 bits
+	u8   CStickX, CStickY;                 // Sub-Stick, 16 bits
+};
+static_assert(sizeof(ControllerState_Version1) == 8, "ControllerState should be 8 bytes"); //Dragonbane
+#pragma pack(pop)
+
+
 // Global declarations
 extern bool g_bDiscChange, g_bClearSave, g_bReset;
 extern u64 g_titleID;
@@ -162,8 +202,62 @@ struct DTMHeader
 	u8   reserved2[11];     // Make heading 256 bytes, just because we can
 };
 static_assert(sizeof(DTMHeader) == 256, "DTMHeader should be 256 bytes");
-
 #pragma pack(pop)
+
+#pragma pack(push,1)
+struct DTMHeader_Version12
+{
+	u8 filetype[4];         // Unique Identifier (always "DTM"0x1A)
+
+	u8 gameID[6];           // The Game ID
+	bool bWii;              // Wii game
+
+	u8  numControllers;     // The number of connected controllers (1-4)
+
+	bool bFromSaveState;    // false indicates that the recording started from bootup, true for savestate
+	u64 frameCount;         // Number of frames in the recording
+	u64 inputCount;         // Number of input frames in recording
+	u64 lagCount;           // Number of lag frames in the recording
+	u64 uniqueID;           // (not implemented) A Unique ID comprised of: md5(time + Game ID)
+	u32 numRerecords;       // Number of rerecords/'cuts' of this TAS
+	u8  author[32];         // Author's name (encoded in UTF-8)
+
+	u8  videoBackend[16];   // UTF-8 representation of the video backend
+	u8  audioEmulator[16];  // UTF-8 representation of the audio emulator
+	u8  md5[16];            // MD5 of game iso
+
+	u64 recordingStartTime; // seconds since 1970 that recording started (used for RTC)
+
+	bool bSaveConfig;       // Loads the settings below on startup if true
+	bool bSkipIdle;
+	bool bDualCore;
+	bool bProgressive;
+	bool bDSPHLE;
+	bool bFastDiscSpeed;
+	u8   CPUCore;           // 0 = interpreter, 1 = JIT, 2 = JITIL
+	bool bEFBAccessEnable;
+	bool bEFBCopyEnable;
+	bool bCopyEFBToTexture;
+	bool bEFBCopyCacheEnable;
+	bool bEFBEmulateFormatChanges;
+	bool bUseXFB;
+	bool bUseRealXFB;
+	u8   memcards;
+	bool bClearSave;        // Create a new memory card when playing back a movie if true
+	u8   bongos;
+	bool bSyncGPU;
+	bool bNetPlay;
+	u8   reserved[13];      // Padding for any new config options
+	u8   discChange[40];    // Name of iso file to switch to, for two disc games.
+	u8   revision[20];      // Git hash
+	u32  DSPiromHash;
+	u32  DSPcoefHash;
+	u64  tickCount;	        // Number of ticks in the recording
+	u8   reserved2[11];     // Make heading 256 bytes, just because we can
+};
+static_assert(sizeof(DTMHeader_Version12) == 256, "DTMHeader should be 256 bytes");
+#pragma pack(pop)
+
 
 void FrameUpdate();
 void InputUpdate();

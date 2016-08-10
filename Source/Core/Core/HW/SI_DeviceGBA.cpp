@@ -19,6 +19,7 @@
 #include "Core/HW/SystemTimers.h"
 #include "Core/HW/VideoInterface.h"
 #include "Core/Movie.h" //Dragonbane
+#include "Core/State.h" //Dragonbane
 #include "Core/HW/Memmap.h" //Dragonbane
 
 #include "SFML/Network.hpp"
@@ -4165,29 +4166,32 @@ int CSIDevice_GBA::TransferInterval()
 // Dragonbane: Savestate support
 void CSIDevice_GBA::DoState(PointerWrap& p)
 {
-	p.Do(isEnabled);
-	p.Do(isConnecting);
-	p.Do(idlePhase);
+	if (!p.GetMode() == PointerWrap::MODE_READ || State::ZE_VERSION > 2)
+	{
+		p.Do(isEnabled);
+		p.Do(isConnecting);
+		p.Do(idlePhase);
 
-	p.Do(frameTarget);
-	p.Do(globalConnectionPhase);
-	p.Do(localConnectionPhase);
-	p.Do(finalDataGlobalPhase);
+		p.Do(frameTarget);
+		p.Do(globalConnectionPhase);
+		p.Do(localConnectionPhase);
+		p.Do(finalDataGlobalPhase);
 
-	p.Do(handShake1);
-	p.Do(handShake2);
-	p.Do(handShake3);
-	p.Do(handShake4);
+		p.Do(handShake1);
+		p.Do(handShake2);
+		p.Do(handShake3);
+		p.Do(handShake4);
 
-	p.Do(isConnected);
-	p.Do(inLoading);
-	p.Do(tingleRNG);
-	p.Do(actionPhase);
-	p.Do(actionDataMode);
+		p.Do(isConnected);
+		p.Do(inLoading);
+		p.Do(tingleRNG);
+		p.Do(actionPhase);
+		p.Do(actionDataMode);
 
-	//Connection Variables
-	p.Do(waiting_for_response);
-	p.Do(send_data);
-	p.Do(num_data_received);
-	p.Do(timestamp_sent);	
+		//Connection Variables
+		p.Do(waiting_for_response);
+		p.Do(send_data);
+		p.Do(num_data_received);
+		p.Do(timestamp_sent);
+	}
 }
