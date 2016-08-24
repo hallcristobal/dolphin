@@ -19,7 +19,7 @@ namespace State
 static const u32 NUM_STATES = 10;
 
 //Dragonbane: ZE Savestate Version for BC (1 = Original 5371; 2 = Rolling Assist; 3 = Tuner Stuff)
-static int ZE_VERSION = 2;
+static int ZE_VERSION = 3;
 
 struct StateHeader
 {

@@ -346,6 +346,9 @@ private:
 	void OnTWWTunerInput(wxCommandEvent& event); //Dragonbane
 	void OnScriptLaunch(wxCommandEvent& event); //Dragonbane
 	void OnAttachDTM(wxCommandEvent& event); //Dragonbane
+	void OnZEVer1(wxCommandEvent& event); //Dragonbane
+	void OnZEVer2(wxCommandEvent& event); //Dragonbane
+	void OnZEVer3(wxCommandEvent& event); //Dragonbane
 	void OnImportSave(wxCommandEvent& event);
 	void OnExportAllSaves(wxCommandEvent& event);
 

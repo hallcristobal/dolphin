@@ -296,6 +296,11 @@ wxMenuBar* CFrame::CreateMenu()
 	twwMenu->Append(IDM_SUPERSWIM, "Superswim Script");
 	twwMenu->Append(IDM_TUNERINPUT, "Tuner Input");
 
+	wxMenu* zeVersionMenu = new wxMenu;
+	zeVersionMenu->Append(IDM_SETZEVER1, "1");
+	zeVersionMenu->Append(IDM_SETZEVER2, "2");
+	zeVersionMenu->Append(IDM_SETZEVER3, "3");
+
 	wxMenu* zeldaMenu = new wxMenu;
 	zeldaMenu->Append(IDM_TPCOMPARE, "Create Video Comparison");
 	zeldaMenu->Append(IDM_ATTACHDTM, "Attach DTM");
@@ -303,6 +308,8 @@ wxMenuBar* CFrame::CreateMenu()
 	zeldaMenu->AppendSeparator();
 	zeldaMenu->AppendSubMenu(tpMenu, "TP");
 	zeldaMenu->AppendSubMenu(twwMenu, "TWW");
+	zeldaMenu->AppendSeparator();
+	zeldaMenu->AppendSubMenu(zeVersionMenu, "Set Zelda Edition Version");
 
 	menubar->Append(zeldaMenu, "Zelda");
 
@@ -1748,6 +1755,18 @@ void CFrame::OnScriptLaunch(wxCommandEvent& WXUNUSED(event))
 void CFrame::OnAttachDTM(wxCommandEvent& WXUNUSED(event))
 {
 	g_AttachDTM->Show(true);
+}
+void CFrame::OnZEVer1(wxCommandEvent& WXUNUSED(event))
+{
+	State::ZE_VERSION = 1;
+}
+void CFrame::OnZEVer2(wxCommandEvent& WXUNUSED(event))
+{
+	State::ZE_VERSION = 2;
+}
+void CFrame::OnZEVer3(wxCommandEvent& WXUNUSED(event))
+{
+	State::ZE_VERSION = 3;
 }
 
 void CFrame::OnExportAllSaves(wxCommandEvent& WXUNUSED (event))

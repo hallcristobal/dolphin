@@ -114,6 +114,9 @@ enum
 	IDM_TUNERINPUT, //Dragonbane
 	IDM_SCRIPTLAUNCH, //Dragonbane
 	IDM_ATTACHDTM, //Dragonbane
+	IDM_SETZEVER1, //Dragonbane
+	IDM_SETZEVER2, //Dragonbane
+	IDM_SETZEVER3, //Dragonbane
 	IDM_CHEATS,
 	IDM_NETPLAY,
 	IDM_RESTART,

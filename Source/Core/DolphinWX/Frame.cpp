@@ -306,6 +306,9 @@ EVT_MENU(IDM_SUPERSWIM, CFrame::OnTWWSuperSwim) //Dragonbane
 EVT_MENU(IDM_TUNERINPUT, CFrame::OnTWWTunerInput) //Dragonbane
 EVT_MENU(IDM_SCRIPTLAUNCH, CFrame::OnScriptLaunch) //Dragonbane
 EVT_MENU(IDM_ATTACHDTM, CFrame::OnAttachDTM) //Dragonbane
+EVT_MENU(IDM_SETZEVER1, CFrame::OnZEVer1) //Dragonbane
+EVT_MENU(IDM_SETZEVER2, CFrame::OnZEVer2) //Dragonbane
+EVT_MENU(IDM_SETZEVER3, CFrame::OnZEVer3) //Dragonbane
 EVT_MENU(IDM_IMPORT_SAVE, CFrame::OnImportSave)
 EVT_MENU(IDM_EXPORT_ALL_SAVE, CFrame::OnExportAllSaves)
 EVT_MENU(IDM_CHEATS, CFrame::OnShow_CheatsWindow)
