@@ -107,7 +107,9 @@ std::string TabsToSpaces(int tab_size, const std::string& in);
 void SplitString(const std::string& str, char delim, std::vector<std::string>& output);
 
 // "C:/Windows/winhelp.exe" to "C:/Windows/", "winhelp", ".exe"
-bool SplitPath(const std::string& full_path, std::string* _pPath, std::string* _pFilename, std::string* _pExtension);
+bool SplitPath(const std::string& full_path, std::string* _pPath, std::string* _pFilename, std::string* _pExtension); 
+bool SplitPathEscapeChar(const std::string& full_path, std::string* _pPath, std::string* _pFilename, std::string* _pExtension); //Dragonbane
+
 
 void BuildCompleteFilename(std::string& _CompleteFilename, const std::string& _Path, const std::string& _Filename);
 std::string ReplaceAll(std::string result, const std::string& src, const std::string& dest);

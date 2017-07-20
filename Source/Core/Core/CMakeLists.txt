@@ -245,6 +245,7 @@ if(LIBUSB_FOUND)
 endif(LIBUSB_FOUND)
 
 set(LIBS ${LIBS} ${MBEDTLS_LIBRARIES})
+set(LIBS ${LIBS} ${POLARSSL_LIBRARY})
 
 if(WIN32)
 	set(SRCS ${SRCS} HW/BBA-TAP/TAP_Win32.cpp HW/WiimoteReal/IOWin.cpp)
