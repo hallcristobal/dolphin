@@ -25,6 +25,7 @@
 #include "Core/CoreTiming.h"
 #include "Core/Host.h"
 #include "Core/Movie.h"
+#include "Core/LUA/Lua.h" //Dragonbane
 #include "Core/NetPlayClient.h"
 #include "Core/State.h"
 #include "Core/HW/HW.h"
@@ -397,6 +398,10 @@ static void CompressAndDumpState(CompressAndDumpState_args save_args)
 
 	Core::DisplayMessage(StringFromFormat("Saved State to %s", filename.c_str()), 2000);
 	Host_UpdateMainFrame();
+
+	//Dragonbane:: Callback for LUA
+	if (Lua::lua_isStateOperation)
+		Lua::lua_isStateSaved = true;
 }
 
 void SaveAs(const std::string& filename, bool wait)
@@ -534,6 +539,18 @@ static void LoadFileStateData(const std::string& filename, std::vector<u8>& ret_
 		}
 	}
 
+	/*
+	File::IOFile g(filename + "_uncomp.sav", "wb");
+
+	const u8* const buffer_data = &buffer[0];
+	const size_t buffer_size = buffer.size();
+
+	g.WriteArray(&header, 1);
+	g.WriteBytes(buffer_data, buffer_size);
+
+	g.Close();
+	*/
+
 	// all good
 	ret_data.swap(buffer);
 }
@@ -554,6 +571,9 @@ void LoadAs(const std::string& filename)
 	bool wasUnpaused = Core::PauseAndLock(true);
 
 	g_loadDepth++;
+
+	//Dragonbane
+	Movie::justStoppedRecording = false;
 
 	// Save temp buffer for undo load state
 	if (!Movie::IsJustStartingRecordingInputFromSaveState())
@@ -593,7 +613,14 @@ void LoadAs(const std::string& filename)
 			if (File::Exists(filename + ".dtm"))
 				Movie::LoadInput(filename + ".dtm");
 			else if (!Movie::IsJustStartingRecordingInputFromSaveState() && !Movie::IsJustStartingPlayingInputFromSaveState())
+			{
 				Movie::EndPlayInput(false);
+				Movie::CancelVerifying();
+			}
+
+			//Dragonbane:: Callback for LUA
+			if (Lua::lua_isStateOperation)
+				Lua::lua_isStateLoaded = true;
 		}
 		else
 		{
